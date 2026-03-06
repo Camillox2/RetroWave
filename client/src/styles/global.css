@@ -4693,20 +4693,53 @@ button {
   font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
-  margin-bottom: 6px;
-  cursor: pointer;
+  margin-bottom: 10px;
 }
 
-.banner-sparkle-header .editor-toggle {
-  margin-left: auto;
-  cursor: pointer;
+/* Grid de efeitos cintilantes (6 opções: 5 efeitos + nenhum) */
+.banner-cintilante-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.banner-sparkle-desc {
-  font-size: 0.5rem;
-  opacity: 0.5;
-  letter-spacing: 0.5px;
-  margin-bottom: 0;
+.banner-cintilante-option {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 8px 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-color);
+  font-family: inherit;
+  transition: all 0.18s;
+}
+
+.banner-cintilante-option:hover {
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+}
+
+.banner-cintilante-option.active {
+  border-color: rgba(138,43,226,0.6);
+  background: rgba(138,43,226,0.12);
+  box-shadow: 0 0 10px rgba(138,43,226,0.18);
+}
+
+.banner-cintilante-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.banner-cintilante-name {
+  font-size: 0.44rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 
 /* Speed selector */

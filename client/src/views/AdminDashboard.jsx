@@ -12,78 +12,137 @@ const PRODUCTS_PER_PAGE = 20;
 // ═══════════════════════════════════════
 // BANNER SPARKLE CANVAS
 // ═══════════════════════════════════════
-function BannerSparkle({ speed = 'medium' }) {
+function BannerSparkle({ speed = 'medium', effect = 'cometa' }) {
   const canvasRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const speedMap = { slow: 0.003, medium: 0.007, fast: 0.016 };
+    const speedMap = { superslow: 0.001, slow: 0.003, medium: 0.007, fast: 0.016 };
     const spd = speedMap[speed] || 0.007;
 
     const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
     resize();
     window.addEventListener('resize', resize);
 
-    // Perimeter: top → right → bottom → left, t: 0..1
-    const perimeterPoint = (t, w, h) => {
-      const perim = 2 * (w + h);
-      const d = t * perim;
-      if (d < w)        return { x: d, y: 0 };
-      if (d < w + h)    return { x: w, y: d - w };
-      if (d < 2 * w + h) return { x: w - (d - w - h), y: h };
+    const perimPt = (t, w, h) => {
+      const d = t * 2 * (w + h);
+      if (d < w)          return { x: d, y: 0 };
+      if (d < w + h)      return { x: w, y: d - w };
+      if (d < 2 * w + h)  return { x: w - (d - w - h), y: h };
       return { x: 0, y: h - (d - 2 * w - h) };
     };
 
-    // Multiple comets offset from each other
-    const COMETS = 2;
-    const offsets = Array.from({ length: COMETS }, (_, i) => i / COMETS);
-    let t = 0;
+    const sparks = effect === 'faisca'
+      ? Array.from({ length: 30 }, () => ({
+          t: Math.random(), age: Math.random(), life: 0.5 + Math.random() * 1.5, r: 1.5 + Math.random() * 3,
+        }))
+      : [];
+
+    let prog = 0;
     let raf;
 
     const draw = () => {
       const w = canvas.width, h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      offsets.forEach(offset => {
-        const ct = (t + offset) % 1;
-        const tailLen = 0.12; // tail length as fraction of perimeter
-
-        // Draw tail (gradient segments)
-        const STEPS = 60;
-        for (let i = 0; i < STEPS; i++) {
-          const ft = (ct - (i / STEPS) * tailLen + 1) % 1;
-          const { x, y } = perimeterPoint(ft, w, h);
-          const alpha = (1 - i / STEPS) * 0.9;
-          const radius = (1 - i / STEPS) * 3.5 + 0.5;
-          // Color: azul-roxo para branco na ponta
-          const r = Math.round(120 + (255 - 120) * (1 - i / STEPS));
-          const g = Math.round(60  + (255 -  60) * (1 - i / STEPS));
-          const b = 255;
+      if (effect === 'cometa') {
+        [0, 0.5].forEach(off => {
+          const ct = (prog + off) % 1;
+          for (let i = 0; i < 60; i++) {
+            const ft = (ct - (i / 60) * 0.12 + 1) % 1;
+            const { x, y } = perimPt(ft, w, h);
+            const p = 1 - i / 60;
+            ctx.beginPath();
+            ctx.arc(x, y, p * 3.5 + 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${Math.round(120 + 135 * p)},${Math.round(60 + 195 * p)},255,${p * 0.9})`;
+            ctx.fill();
+          }
+          const { x: hx, y: hy } = perimPt(ct, w, h);
+          const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, 18);
+          g.addColorStop(0, 'rgba(255,255,255,1)');
+          g.addColorStop(0.3, 'rgba(180,120,255,0.8)');
+          g.addColorStop(1, 'rgba(80,40,200,0)');
+          ctx.beginPath(); ctx.arc(hx, hy, 18, 0, Math.PI * 2);
+          ctx.fillStyle = g; ctx.fill();
+        });
+      } else if (effect === 'pulsar') {
+        const p = (Math.sin(prog * Math.PI * 2 * 4) + 1) / 2;
+        const alpha = 0.3 + p * 0.7;
+        const lw = 3 + p * 8;
+        ctx.save();
+        ctx.strokeStyle = `rgba(160,80,255,${alpha})`;
+        ctx.lineWidth = lw;
+        ctx.shadowColor = 'rgba(180,80,255,0.9)';
+        ctx.shadowBlur = 20 + p * 25;
+        ctx.strokeRect(lw / 2, lw / 2, w - lw, h - lw);
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,150,255,${alpha * 0.6})`;
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = 'rgba(255,100,255,0.5)';
+        ctx.shadowBlur = 10 * p;
+        ctx.strokeRect(10, 10, w - 20, h - 20);
+        ctx.restore();
+      } else if (effect === 'aurora') {
+        for (let i = 0; i < 250; i++) {
+          const tp = (prog + i / 250 * 0.6) % 1;
+          const { x, y } = perimPt(tp, w, h);
+          const hue = ((i / 250) * 240 + prog * 360) % 360;
+          const r = Math.max(0.5, 2 + Math.sin((i / 250) * Math.PI * 4 + prog * 10) * 1);
           ctx.beginPath();
-          ctx.arc(x, y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${hue},100%,65%,0.75)`;
           ctx.fill();
         }
+      } else if (effect === 'faisca') {
+        sparks.forEach(s => {
+          s.age += spd * 1.5;
+          if (s.age > s.life) {
+            s.t = Math.random(); s.age = 0; s.life = 0.3 + Math.random() * 1.2; s.r = 1.5 + Math.random() * 3;
+          }
+          const fade = s.age < s.life * 0.3
+            ? s.age / (s.life * 0.3)
+            : 1 - (s.age - s.life * 0.3) / (s.life * 0.7);
+          const { x, y } = perimPt(s.t, w, h);
+          const gr = ctx.createRadialGradient(x, y, 0, x, y, s.r * 5);
+          gr.addColorStop(0, `rgba(255,255,255,${fade})`);
+          gr.addColorStop(0.4, `rgba(200,140,255,${fade * 0.7})`);
+          gr.addColorStop(1, `rgba(80,30,200,0)`);
+          ctx.beginPath(); ctx.arc(x, y, s.r * 5, 0, Math.PI * 2);
+          ctx.fillStyle = gr; ctx.fill();
+        });
+      } else if (effect === 'neon') {
+        const flicker = 0.88 + Math.random() * 0.12;
+        const hue = (prog * 360) % 360;
+        ctx.save();
+        ctx.strokeStyle = `hsla(${hue},100%,60%,${0.9 * flicker})`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = `hsla(${hue},100%,70%,0.9)`;
+        ctx.shadowBlur = 18;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = `hsla(${(hue + 40) % 360},100%,80%,${0.5 * flicker})`;
+        ctx.lineWidth = 1;
+        ctx.shadowColor = `hsla(${(hue + 40) % 360},100%,80%,0.6)`;
+        ctx.shadowBlur = 12;
+        ctx.strokeRect(5, 5, w - 10, h - 10);
+        ctx.restore();
+        const { x: hx, y: hy } = perimPt(prog, w, h);
+        const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, 25);
+        g.addColorStop(0, `rgba(255,255,255,${0.7 * flicker})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.beginPath(); ctx.arc(hx, hy, 25, 0, Math.PI * 2);
+        ctx.fillStyle = g; ctx.fill();
+      }
 
-        // Bright head
-        const { x: hx, y: hy } = perimeterPoint(ct, w, h);
-        const grd = ctx.createRadialGradient(hx, hy, 0, hx, hy, 18);
-        grd.addColorStop(0, 'rgba(255,255,255,1)');
-        grd.addColorStop(0.3, 'rgba(180,120,255,0.8)');
-        grd.addColorStop(1, 'rgba(80,40,200,0)');
-        ctx.beginPath();
-        ctx.arc(hx, hy, 18, 0, Math.PI * 2);
-        ctx.fillStyle = grd;
-        ctx.fill();
-      });
-
-      t = (t + spd) % 1;
+      prog = (prog + spd) % 1;
       raf = requestAnimationFrame(draw);
     };
     draw();
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
-  }, [speed]);
+  }, [speed, effect]);
   return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3 }} />;
 }
 
@@ -1308,7 +1367,14 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
   };
 
   // ── BANNER TAB ──
-  const renderBannerTab = () => (
+  const renderBannerTab = () => {
+    const CINT_EFFECTS = ['cometa', 'pulsar', 'aurora', 'faisca', 'neon'];
+    const rawCint = siteConfig.banner_cintilante;
+    const cintEffect = (rawCint === 'none' || rawCint === '0') ? null
+      : (CINT_EFFECTS.includes(rawCint) ? rawCint : 'cometa');
+    const cintSelected = cintEffect ?? 'none';
+
+    return (
     <div className="admin-config-section">
       <div className="config-section-header">
         <h3><Megaphone size={16} /> BANNER HERO</h3>
@@ -1318,16 +1384,15 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
         {/* ── ESQUERDA: preview + campos ── */}
         <div className="banner-layout-left">
           <div className="editor-preview-label"><Eye size={12} /> PRÉVIA AO VIVO</div>
-          <div className="banner-preview-card" data-anim={siteConfig.banner_animacao || 'flag'}
-            style={{ '--speed-mul': { slow: 2.5, medium: 1, fast: 0.38 }[siteConfig.banner_sparkle_speed || 'medium'] }}>
+          <div className="banner-preview-card" data-anim={siteConfig.banner_animacao || 'flag'}>
             {siteConfig.banner_imagem && <img src={siteConfig.banner_imagem} alt="Banner" className="banner-preview-bg" />}
             <div className="banner-preview-overlay">
               <h2>{siteConfig.banner_titulo || 'TÍTULO DO BANNER'}</h2>
               <p>{siteConfig.banner_subtitulo || 'Subtítulo do banner'}</p>
               {siteConfig.banner_link && <span className="banner-preview-cta">VER COLEÇÃO →</span>}
             </div>
-            {(siteConfig.banner_cintilante || '1') !== '0' && (
-              <BannerSparkle speed={siteConfig.banner_sparkle_speed || 'medium'} />
+            {cintEffect && (
+              <BannerSparkle speed={siteConfig.banner_sparkle_speed || 'medium'} effect={cintEffect} />
             )}
           </div>
 
@@ -1400,20 +1465,34 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
             <div className="banner-sparkle-header">
               <Sparkles size={14} />
               <span>EFEITO CINTILANTE</span>
-              <div
-                className={`editor-toggle ${(siteConfig.banner_cintilante || '1') !== '0' ? 'active' : ''}`}
-                onClick={() => setSiteConfig(prev => ({ ...prev, banner_cintilante: (prev.banner_cintilante || '1') !== '0' ? '0' : '1' }))}
-              >
-                <div className="editor-toggle-knob" />
-              </div>
             </div>
-            <p className="banner-sparkle-desc">Estrelas cintilantes ao redor das bordas do banner</p>
+            <div className="banner-cintilante-grid">
+              {[
+                { id: 'cometa', nome: 'COMETA',  icon: '☄' },
+                { id: 'pulsar', nome: 'PULSAR',  icon: '◎' },
+                { id: 'aurora', nome: 'AURORA',  icon: '≋' },
+                { id: 'faisca', nome: 'FAÍSCA',  icon: '✦' },
+                { id: 'neon',   nome: 'NEON',    icon: '▣' },
+                { id: 'none',   nome: 'NENHUM',  icon: '✕' },
+              ].map(ef => (
+                <button
+                  key={ef.id}
+                  type="button"
+                  className={`banner-cintilante-option ${cintSelected === ef.id ? 'active' : ''}`}
+                  onClick={() => setSiteConfig(prev => ({ ...prev, banner_cintilante: ef.id }))}
+                >
+                  <span className="banner-cintilante-icon">{ef.icon}</span>
+                  <span className="banner-cintilante-name">{ef.nome}</span>
+                </button>
+              ))}
+            </div>
 
-            {(siteConfig.banner_cintilante || '1') !== '0' && (
+            {cintEffect && (
               <div className="editor-field" style={{ marginTop: 12 }}>
-                <label>VELOCIDADE — animações + cintilante</label>
-                <div className="banner-speed-grid">
+                <label>VELOCIDADE</label>
+                <div className="banner-speed-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                   {[
+                    { id: 'superslow', label: 'ULTRA', dots: 0 },
                     { id: 'slow', label: 'LENTO', dots: 1 },
                     { id: 'medium', label: 'MÉDIO', dots: 2 },
                     { id: 'fast', label: 'RÁPIDO', dots: 3 },
@@ -1424,7 +1503,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                       className={`banner-speed-option ${(siteConfig.banner_sparkle_speed || 'medium') === sp.id ? 'active' : ''}`}
                       onClick={() => setSiteConfig(prev => ({ ...prev, banner_sparkle_speed: sp.id }))}
                     >
-                      <span className="banner-speed-dots">{Array(sp.dots).fill('★').join(' ')}</span>
+                      <span className="banner-speed-dots">{sp.dots === 0 ? '🐢' : Array(sp.dots).fill('★').join(' ')}</span>
                       <span>{sp.label}</span>
                     </button>
                   ))}
@@ -1435,7 +1514,8 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // ── CONFIG TAB ──
   const renderConfigTab = () => (
