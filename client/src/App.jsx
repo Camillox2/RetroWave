@@ -240,6 +240,41 @@ function PolicyModal({ isOpen, onClose }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════
+// ERROR BOUNDARY — Evita tela preta em crashes de render
+// ═══════════════════════════════════════════════════════
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', color: '#fff', fontFamily: 'Arial, sans-serif', padding: 32 }}>
+          <h1 style={{ fontSize: '1rem', letterSpacing: 4, marginBottom: 16 }}>ERRO DE RENDERIZAÇÃO</h1>
+          <p style={{ opacity: 0.5, fontSize: '0.7rem', letterSpacing: 2, maxWidth: 400, textAlign: 'center', marginBottom: 24 }}>
+            {this.state.error?.message || 'Erro inesperado'}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
+            style={{ background: '#fff', color: '#000', border: 'none', padding: '10px 24px', fontSize: '0.65rem', letterSpacing: 3, cursor: 'pointer' }}
+          >
+            VOLTAR AO INÍCIO
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function AppContent() {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -254,6 +289,15 @@ function AppContent() {
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState('');
   const [filterLocked, setFilterLocked] = useState(false);
+  const [anuncioBanner, setAnuncioBanner] = useState(null);
+
+  // Buscar anúncio ativo do site
+  useEffect(() => {
+    fetch(`${API_URL}/api/anuncios/ativo`)
+      .then(r => r.json())
+      .then(data => setAnuncioBanner(data))
+      .catch(() => {});
+  }, []);
   const [langOpen, setLangOpen] = useState(false);
   const location = useLocation();
   const toast = useToast();
@@ -408,10 +452,12 @@ function AppContent() {
       .catch(() => {});
   }, [cliente?.email]);
 
-  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes', 'newsletter'];
+  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes', 'newsletter', 'estoque', 'promocoes', 'lucratividade', 'campanhas'];
   const adminTabLabels = {
     dashboard: 'PAINEL', produtos: 'PRODUTOS', banner: 'BANNER', config: 'CONFIG',
-    despesas: 'DESPESAS', pedidos: 'PEDIDOS', cupons: 'CUPONS', avaliacoes: 'REVIEWS', newsletter: 'NEWSLETTER'
+    despesas: 'DESPESAS', pedidos: 'PEDIDOS', cupons: 'CUPONS', avaliacoes: 'REVIEWS',
+    newsletter: 'NEWSLETTER', estoque: 'ESTOQUE', promocoes: 'PROMOÇÕES',
+    lucratividade: 'LUCRATIVIDADE', campanhas: 'CAMPANHAS'
   };
 
   const handleNewsletterSubmit = async (e) => {
@@ -451,6 +497,19 @@ function AppContent() {
 
   return (
     <>
+      {/* ── BANNER DE ANÚNCIO ── */}
+      {anuncioBanner && (
+        <div
+          className="announcement-bar"
+          style={{ background: anuncioBanner.cor_fundo, color: anuncioBanner.cor_texto, cursor: anuncioBanner.link ? 'pointer' : 'default' }}
+          onClick={() => anuncioBanner.link && (window.location.href = anuncioBanner.link)}
+          role={anuncioBanner.link ? 'link' : undefined}
+        >
+          <span className="announcement-titulo">{anuncioBanner.titulo}</span>
+          {anuncioBanner.subtitulo && <span className="announcement-sub">{anuncioBanner.subtitulo}</span>}
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header className="header">
         <button className="menu-mobile" onClick={() => setIsMobileMenuOpen(true)} aria-label="Menu">
@@ -784,13 +843,17 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
-      <I18nProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </I18nProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <I18nProvider>
+          <ToastProvider>
+            <ErrorBoundary>
+              <AppContent />
+            </ErrorBoundary>
+          </ToastProvider>
+        </I18nProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

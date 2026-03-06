@@ -5,12 +5,15 @@ import { API_URL } from '../config.js';
 import { Package, Truck, CheckCircle, Clock, XCircle, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
 
 const STATUS_CONFIG = {
+  aguardando: { label: 'AGUARDANDO ENVIO', icon: Clock, step: 1 },
   concluido: { label: 'PEDIDO CONFIRMADO', icon: CheckCircle, step: 1 },
   preparando: { label: 'PREPARANDO', icon: Clock, step: 2 },
   enviado: { label: 'ENVIADO', icon: Truck, step: 3 },
   entregue: { label: 'ENTREGUE', icon: Package, step: 4 },
   cancelado: { label: 'CANCELADO', icon: XCircle, step: 0 },
 };
+
+const PER_PAGE = 10;
 
 function MeusPedidos({ cliente, onLogout }) {
   const navigate = useNavigate();
@@ -19,6 +22,7 @@ function MeusPedidos({ cliente, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [expandedPedido, setExpandedPedido] = useState(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (!cliente?.email) {
@@ -54,12 +58,17 @@ function MeusPedidos({ cliente, onLogout }) {
     );
   }
 
-  const estimarEntrega = (createdAt, status) => {
-    const data = new Date(createdAt);
-    if (status === 'entregue') return t('orders.delivered');
-    if (status === 'cancelado') return t('orders.cancelled');
-    data.setDate(data.getDate() + 12);
-    return `${t('orders.estimate')}: ${data.toLocaleDateString('pt-BR')}`;
+  const estimarEntrega = (pedido) => {
+    const { status, data_envio, codigo_rastreio } = pedido;
+    if (status === 'entregue') return t('orders.delivered') || 'Pedido entregue';
+    if (status === 'cancelado') return t('orders.cancelled') || 'Pedido cancelado';
+    if (status === 'aguardando' || status === 'preparando') return 'Data de envio a confirmar';
+    if (status === 'enviado' && data_envio) {
+      const d = new Date(data_envio);
+      d.setDate(d.getDate() + 10);
+      return `Previsão de entrega: ${d.toLocaleDateString('pt-BR')}`;
+    }
+    return 'Previsão de entrega em breve';
   };
 
   return (
@@ -84,7 +93,7 @@ function MeusPedidos({ cliente, onLogout }) {
         </div>
       ) : (
         <div className="pedidos-list">
-          {pedidos.map(pedido => {
+          {pedidos.slice((page - 1) * PER_PAGE, page * PER_PAGE).map(pedido => {
             const statusInfo = STATUS_CONFIG[pedido.status] || STATUS_CONFIG.concluido;
             const StatusIcon = statusInfo.icon;
             const isExpanded = expandedPedido === pedido.id;
@@ -120,7 +129,7 @@ function MeusPedidos({ cliente, onLogout }) {
                   <div className="tracking-bar">
                     <div className="tracking-progress" style={{ width: `${(statusInfo.step / 4) * 100}%` }} />
                     <div className="tracking-steps">
-                      {[t('orders.status_concluido'), t('orders.status_preparando'), t('orders.status_enviado'), t('orders.status_entregue')].map((label, i) => (
+                      {['Aguardando', 'Preparando', 'Enviado', 'Entregue'].map((label, i) => (
                         <div
                           key={label}
                           className={`tracking-step ${(i + 1) <= statusInfo.step ? 'active' : ''}`}
@@ -138,8 +147,22 @@ function MeusPedidos({ cliente, onLogout }) {
                   <div className="pedido-card-details">
                     <div className="pedido-entrega">
                       <Truck size={14} />
-                      <span>{estimarEntrega(pedido.created_at, pedido.status)}</span>
+                      <span>{estimarEntrega(pedido)}</span>
                     </div>
+                    {pedido.codigo_rastreio && (
+                      <div className="pedido-rastreio">
+                        <Package size={14} />
+                        <span>Rastreio: <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{pedido.codigo_rastreio}</strong></span>
+                        <a
+                          href={`https://rastreamento.correios.com.br/app/index.php?objetos=${pedido.codigo_rastreio}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rastreio-link"
+                        >
+                          Rastrear nos Correios ↗
+                        </a>
+                      </div>
+                    )}
 
                     <div className="pedido-itens-list">
                       <h4>{t('orders.order_items')}</h4>
@@ -168,6 +191,21 @@ function MeusPedidos({ cliente, onLogout }) {
               </div>
             );
           })}
+          {pedidos.length > PER_PAGE && (
+            <div className="pedidos-pagination">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="pedidos-page-btn"
+              >← Anterior</button>
+              <span>{page} / {Math.ceil(pedidos.length / PER_PAGE)}</span>
+              <button
+                disabled={page >= Math.ceil(pedidos.length / PER_PAGE)}
+                onClick={() => setPage(p => p + 1)}
+                className="pedidos-page-btn"
+              >Próxima →</button>
+            </div>
+          )}
         </div>
       )}
     </div>

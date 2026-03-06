@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail } from 'lucide-react';
-import { AreaChart, Area, BarChart as RChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail, Bell, BellRing, TrendingUp, DollarSign, ChevronDown, ChevronRight, Send, Camera, Package } from 'lucide-react';
+import { AreaChart, Area, BarChart as RChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 import { API_URL } from '../config';
 
@@ -276,6 +276,37 @@ function AdminDashboard() {
   const openConfirm = (msg, onConfirm) => setConfirmModal({ open: true, msg, onConfirm });
   const closeConfirm = () => setConfirmModal({ open: false, msg: '', onConfirm: null });
 
+  // Estoque baixo (nova aba)
+  const [estoqueBaixo, setEstoqueBaixo] = useState([]);
+
+  // Promoções / Anúncios (nova aba)
+  const [anuncios, setAnuncios] = useState([]);
+  const [novoAnuncio, setNovoAnuncio] = useState({ titulo: '', subtitulo: '', cor_fundo: '#111111', cor_texto: '#ffffff', link: '', ativo: true, inicio: '', fim: '' });
+  const [editingAnuncio, setEditingAnuncio] = useState(null);
+
+  // Rastreio inline por pedido { [pedidoId]: { codigo, data_envio } }
+  const [rastreioEdits, setRastreioEdits] = useState({});
+  const [pedidoPage, setPedidoPage] = useState(1);
+  const PEDIDOS_PP = 15;
+
+  // Pedido expand (mostrar itens)
+  const [pedidoExpandido, setPedidoExpandido] = useState(null);
+  const [pedidoItens, setPedidoItens] = useState({});
+
+  // Alertas em tempo real
+  const [alertas, setAlertas] = useState({ pedidos: [], estoqueBaixo: [] });
+  const [alertaOpen, setAlertaOpen] = useState(false);
+  const alertasLastCheck = useRef(new Date().toISOString());
+
+  // Lucratividade
+  const [lucratividade, setLucratividade] = useState([]);
+  const [lucratividadeLoaded, setLucratividadeLoaded] = useState(false);
+
+  // Campanhas de email
+  const [campanhas, setCampanhas] = useState([]);
+  const [novaCampanha, setNovaCampanha] = useState({ assunto: '', conteudo: '', agendado_para: '' });
+  const [campanhasLoaded, setCampanhasLoaded] = useState(false);
+
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
@@ -315,7 +346,7 @@ function AdminDashboard() {
   };
 
   // Track which data sets have been loaded to avoid redundant fetches
-  const loadedRef = useRef({ stats: false, produtos: false, despesas: false, pedidos: false, config: false, cupons: false, avaliacoes: false, chart: false, newsletter: false });
+  const loadedRef = useRef({ stats: false, produtos: false, despesas: false, pedidos: false, config: false, cupons: false, avaliacoes: false, chart: false, newsletter: false, estoque: false, anuncios: false });
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -328,6 +359,30 @@ function AdminDashboard() {
     setSelectedIds(new Set());
     setBatchMode(false);
   }, [activeTab]);
+
+  // Polling para alertas em tempo real (a cada 30s)
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const poll = () => {
+      adminFetch(`${API_URL}/api/admin/alertas?desde=${encodeURIComponent(alertasLastCheck.current)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.pedidos && d.pedidos.length > 0) {
+            setAlertas(prev => ({
+              pedidos: [...d.pedidos, ...prev.pedidos].slice(0, 20),
+              estoqueBaixo: d.estoqueBaixo || prev.estoqueBaixo
+            }));
+          } else {
+            setAlertas(prev => ({ ...prev, estoqueBaixo: d.estoqueBaixo || prev.estoqueBaixo }));
+          }
+          alertasLastCheck.current = new Date().toISOString();
+        })
+        .catch(() => {});
+    };
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   const loadData = (tab, force = true) => {
     const loaded = loadedRef.current;
@@ -377,6 +432,26 @@ function AdminDashboard() {
         adminFetch(`${API_URL}/api/admin/newsletter`).then(r => r.json()).then(d => { setNlSubscribers(d); loaded.newsletter = true; }).catch(() => {});
       }
     }
+    if (tab === 'estoque') {
+      if (force || !loaded.estoque) {
+        adminFetch(`${API_URL}/api/admin/produtos/estoque-baixo?limite=30`).then(r => r.json()).then(d => { setEstoqueBaixo(Array.isArray(d) ? d : []); loaded.estoque = true; }).catch(() => {});
+      }
+    }
+    if (tab === 'promocoes') {
+      if (force || !loaded.anuncios) {
+        adminFetch(`${API_URL}/api/admin/anuncios`).then(r => r.json()).then(d => { setAnuncios(d); loaded.anuncios = true; }).catch(() => {});
+      }
+    }
+    if (tab === 'lucratividade') {
+      if (!lucratividadeLoaded || force) {
+        adminFetch(`${API_URL}/api/admin/lucratividade`).then(r => r.json()).then(d => { setLucratividade(Array.isArray(d) ? d : []); setLucratividadeLoaded(true); }).catch(() => {});
+      }
+    }
+    if (tab === 'campanhas') {
+      if (!campanhasLoaded || force) {
+        adminFetch(`${API_URL}/api/admin/campanhas`).then(r => r.json()).then(d => { setCampanhas(Array.isArray(d) ? d : []); setCampanhasLoaded(true); }).catch(() => {});
+      }
+    }
   };
 
   // ── PRODUCT EDITOR ──
@@ -396,7 +471,7 @@ function AdminDashboard() {
     setEditingProduct({
       nome: '', liga: 'BRASILEIRÃO', preco: '', descricao: '', imagem: '', imagens: [],
       destaque: 0, promo_desconto: '', promo_tipo: 'porcentagem', promo_inicio: '', promo_fim: '',
-      estoque_p: -1, estoque_m: -1, estoque_g: -1, estoque_gg: -1
+      estoque_p: 0, estoque_m: 0, estoque_g: 0, estoque_gg: 0, custo: ''
     });
     setIsCreating(true);
     setShowPreview(false);
@@ -521,8 +596,9 @@ function AdminDashboard() {
           promo_tipo: editingProduct.promo_tipo || 'porcentagem',
           promo_inicio: editingProduct.promo_inicio || null,
           promo_fim: editingProduct.promo_fim || null,
-          estoque_p: editingProduct.estoque_p ?? -1, estoque_m: editingProduct.estoque_m ?? -1,
-          estoque_g: editingProduct.estoque_g ?? -1, estoque_gg: editingProduct.estoque_gg ?? -1,
+          estoque_p: editingProduct.estoque_p ?? 0, estoque_m: editingProduct.estoque_m ?? 0,
+          estoque_g: editingProduct.estoque_g ?? 0, estoque_gg: editingProduct.estoque_gg ?? 0,
+          custo: parseFloat(editingProduct.custo) || 0,
         };
         const res = await adminFetch(`${API_URL}/api/admin/produtos`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -537,8 +613,9 @@ function AdminDashboard() {
           promo_tipo: editingProduct.promo_tipo || 'porcentagem',
           promo_inicio: editingProduct.promo_inicio || null,
           promo_fim: editingProduct.promo_fim || null,
-          estoque_p: editingProduct.estoque_p ?? -1, estoque_m: editingProduct.estoque_m ?? -1,
-          estoque_g: editingProduct.estoque_g ?? -1, estoque_gg: editingProduct.estoque_gg ?? -1,
+          estoque_p: editingProduct.estoque_p ?? 0, estoque_m: editingProduct.estoque_m ?? 0,
+          estoque_g: editingProduct.estoque_g ?? 0, estoque_gg: editingProduct.estoque_gg ?? 0,
+          custo: parseFloat(editingProduct.custo) || 0,
         };
         if (editingProduct._imageChanged) body.imagem = editingProduct.imagem;
         await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}`, {
@@ -665,6 +742,60 @@ function AdminDashboard() {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: novoStatus })
     });
     loadData('pedidos');
+  };
+
+  const saveRastreio = async (pedidoId) => {
+    const edit = rastreioEdits[pedidoId] || {};
+    await adminFetch(`${API_URL}/api/admin/pedidos/${pedidoId}/rastreio`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo_rastreio: edit.codigo || '', data_envio: edit.data_envio || '' })
+    });
+    showToast('Rastreio salvo!');
+    loadedRef.current.pedidos = false;
+    loadData('pedidos');
+  };
+
+  const togglePedidoExpand = async (pedidoId) => {
+    if (pedidoExpandido === pedidoId) {
+      setPedidoExpandido(null);
+      return;
+    }
+    setPedidoExpandido(pedidoId);
+    if (!pedidoItens[pedidoId]) {
+      try {
+        const res = await adminFetch(`${API_URL}/api/admin/pedidos/${pedidoId}/itens`);
+        const data = await res.json();
+        setPedidoItens(prev => ({ ...prev, [pedidoId]: Array.isArray(data) ? data : [] }));
+      } catch {
+        setPedidoItens(prev => ({ ...prev, [pedidoId]: [] }));
+      }
+    }
+  };
+
+  // Anúncios / Promoções CRUD
+  const handleAnuncioSubmit = async (e) => {
+    e.preventDefault();
+    const data = editingAnuncio || novoAnuncio;
+    const url = editingAnuncio ? `${API_URL}/api/admin/anuncios/${editingAnuncio.id}` : `${API_URL}/api/admin/anuncios`;
+    const method = editingAnuncio ? 'PUT' : 'POST';
+    try {
+      const res = await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const result = await res.json();
+      if (result.error) { showToast(result.error); return; }
+      setNovoAnuncio({ titulo: '', subtitulo: '', cor_fundo: '#111111', cor_texto: '#ffffff', link: '', ativo: true, inicio: '', fim: '' });
+      setEditingAnuncio(null);
+      showToast(editingAnuncio ? 'Anúncio atualizado!' : 'Anúncio criado!');
+      loadedRef.current.anuncios = false;
+      loadData('promocoes');
+    } catch { showToast('Erro ao salvar anúncio'); }
+  };
+
+  const deleteAnuncio = async (id) => {
+    openConfirm('Deletar este anúncio?', async () => {
+      await adminFetch(`${API_URL}/api/admin/anuncios/${id}`, { method: 'DELETE' });
+      loadedRef.current.anuncios = false;
+      loadData('promocoes');
+    });
   };
 
   // Cupons CRUD (A6)
@@ -984,6 +1115,10 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                 </div>
               </div>
               <div className="editor-field">
+                <label>CUSTO (R$) — para análise de lucratividade</label>
+                <input type="number" step="0.01" min="0" value={editingProduct.custo || ''} onChange={(e) => setEditingProduct(prev => ({ ...prev, custo: e.target.value }))} placeholder="Ex: 89.90" />
+              </div>
+              <div className="editor-field">
                 <label>DESCRIÇÃO</label>
                 <textarea value={editingProduct.descricao || ''} onChange={(e) => setEditingProduct(prev => ({ ...prev, descricao: e.target.value }))} placeholder="Camisa retrô original, material premium em poliéster 100%..." rows={4} />
               </div>
@@ -992,13 +1127,13 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
               <div className="editor-section-divider">
                 <ShoppingBag size={14} /> ESTOQUE POR TAMANHO
               </div>
-              <p style={{ fontSize: '0.6rem', opacity: 0.5, marginBottom: 8 }}>-1 = ilimitado, 0 = esgotado</p>
+              <p style={{ fontSize: '0.6rem', opacity: 0.5, marginBottom: 8 }}>0 = esgotado · edite manualmente a quantidade disponível</p>
               <div className="editor-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
                 {['P', 'M', 'G', 'GG'].map(tam => (
                   <div className="editor-field" key={tam}>
                     <label>TAM {tam}</label>
-                    <input type="number" min={-1} value={editingProduct[`estoque_${tam.toLowerCase()}`] ?? -1}
-                      onChange={(e) => setEditingProduct(prev => ({ ...prev, [`estoque_${tam.toLowerCase()}`]: parseInt(e.target.value) || -1 }))} />
+                    <input type="number" min={0} value={editingProduct[`estoque_${tam.toLowerCase()}`] ?? 0}
+                      onChange={(e) => setEditingProduct(prev => ({ ...prev, [`estoque_${tam.toLowerCase()}`]: parseInt(e.target.value) || 0 }))} />
                   </div>
                 ))}
               </div>
@@ -1208,9 +1343,56 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
       <div className="dashboard-container">
         <div className="dashboard-header">
           <h1>DASHBOARD</h1>
-          <button className="dashboard-logout" onClick={() => { sessionStorage.removeItem('rw_admin_token'); setIsLoggedIn(false); }}>
-            <LogOut size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} /> SAIR
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Notification Bell */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setAlertaOpen(o => !o)}
+                style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, color: 'var(--text-color)', padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
+              >
+                {alertas.pedidos.length > 0 ? <BellRing size={15} /> : <Bell size={15} />}
+                {alertas.pedidos.length > 0 && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', borderRadius: '50%', width: 16, height: 16, fontSize: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                    {alertas.pedidos.length}
+                  </span>
+                )}
+              </button>
+              {alertaOpen && (
+                <div style={{ position: 'absolute', right: 0, top: '110%', width: 300, background: '#111', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, zIndex: 9999, padding: 14 }}>
+                  <div style={{ fontSize: '0.55rem', letterSpacing: 2, fontWeight: 700, marginBottom: 10, opacity: 0.6 }}>ALERTAS</div>
+                  {alertas.pedidos.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: '0.55rem', letterSpacing: 1.5, color: '#4ade80', marginBottom: 6, fontWeight: 600 }}>NOVOS PEDIDOS</div>
+                      {alertas.pedidos.map(p => (
+                        <div key={p.id} style={{ fontSize: '0.65rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          Pedido #{p.id} — R$ {parseFloat(p.total).toFixed(2)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {alertas.estoqueBaixo.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '0.55rem', letterSpacing: 1.5, color: '#facc15', marginBottom: 6, fontWeight: 600 }}>ESTOQUE BAIXO</div>
+                      {alertas.estoqueBaixo.slice(0, 5).map(p => (
+                        <div key={p.id} style={{ fontSize: '0.65rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          {p.nome} — mín: {p.menor_estoque} un.
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {alertas.pedidos.length === 0 && alertas.estoqueBaixo.length === 0 && (
+                    <div style={{ fontSize: '0.6rem', opacity: 0.4, textAlign: 'center', padding: '8px 0' }}>Sem alertas</div>
+                  )}
+                  <button onClick={() => { setAlertas({ pedidos: [], estoqueBaixo: alertas.estoqueBaixo }); setAlertaOpen(false); }} style={{ marginTop: 10, width: '100%', background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-color)', padding: '5px', fontSize: '0.52rem', letterSpacing: 1.5, cursor: 'pointer', borderRadius: 3 }}>
+                    MARCAR COMO LIDO
+                  </button>
+                </div>
+              )}
+            </div>
+            <button className="dashboard-logout" onClick={() => { sessionStorage.removeItem('rw_admin_token'); setIsLoggedIn(false); }}>
+              <LogOut size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} /> SAIR
+            </button>
+          </div>
         </div>
 
         <div className="admin-tabs" style={{ display: 'none' }}>
@@ -1437,21 +1619,116 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
           <div>
             <div className="admin-table-wrapper">
             <table className="admin-table">
-              <thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>EMAIL</th><th>TOTAL</th><th>STATUS</th><th>DATA</th><th>AÇÃO</th></tr></thead>
+              <thead><tr><th></th><th>PEDIDO</th><th>CLIENTE</th><th>EMAIL</th><th>ENDEREÇO</th><th>TOTAL</th><th>STATUS</th><th>DATA</th><th>RASTREIO / DATA ENVIO</th><th>AÇÃO</th></tr></thead>
               <tbody>
-                {pedidos.map(p => (
-                  <tr key={p.id}><td>#{p.id}</td><td>{p.nome || '—'}</td><td>{p.email || '—'}</td><td>R$ {parseFloat(p.total).toFixed(2)}</td>
-                    <td><span className={`pedido-status ${p.status}`}>{p.status}</span></td>
-                    <td>{new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
-                    <td><select value={p.status} onChange={(e) => updatePedidoStatus(p.id, e.target.value)} className="status-select">
-                      <option value="concluido">Confirmado</option><option value="preparando">Preparando</option><option value="enviado">Enviado</option><option value="entregue">Entregue</option><option value="cancelado">Cancelado</option>
-                    </select></td>
-                  </tr>
-                ))}
-                {pedidos.length === 0 && <tr><td colSpan="7" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>SEM PEDIDOS</td></tr>}
+                {pedidos.slice((pedidoPage-1)*PEDIDOS_PP, pedidoPage*PEDIDOS_PP).map(p => {
+                  const rastreioEdit = rastreioEdits[p.id] || { codigo: p.codigo_rastreio || '', data_envio: p.data_envio ? p.data_envio.split('T')[0] : '' };
+                  const isExpanded = pedidoExpandido === p.id;
+                  const itens = pedidoItens[p.id];
+                  return (
+                    <React.Fragment key={p.id}>
+                    <tr style={{ cursor: 'pointer' }}>
+                      <td>
+                        <button onClick={() => togglePedidoExpand(p.id)} style={{ background: 'none', border: 'none', color: 'var(--text-color)', cursor: 'pointer', padding: 4, opacity: 0.6 }}>
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      </td>
+                      <td>#{p.id}</td>
+                      <td>{p.nome || '—'}</td>
+                      <td>{p.email || '—'}</td>
+                      <td style={{ fontSize: '0.6rem', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.7 }}>{p.endereco || '—'}</td>
+                      <td>R$ {parseFloat(p.total).toFixed(2)}</td>
+                      <td><span className={`pedido-status ${p.status}`}>{p.status}</span></td>
+                      <td>{new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ minWidth: 260 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <input
+                            placeholder="Código de rastreio"
+                            value={rastreioEdit.codigo}
+                            onChange={e => setRastreioEdits(prev => ({ ...prev, [p.id]: { ...rastreioEdit, codigo: e.target.value } }))}
+                            style={{ fontSize: '0.65rem', padding: '4px 8px', background: 'var(--bg-secondary)', border: '1px solid var(--accent-color)', color: 'var(--text-color)', borderRadius: 4 }}
+                          />
+                          <input
+                            type="date"
+                            value={rastreioEdit.data_envio}
+                            onChange={e => setRastreioEdits(prev => ({ ...prev, [p.id]: { ...rastreioEdit, data_envio: e.target.value } }))}
+                            style={{ fontSize: '0.65rem', padding: '4px 8px', background: 'var(--bg-secondary)', border: '1px solid var(--accent-color)', color: 'var(--text-color)', borderRadius: 4 }}
+                          />
+                          <button onClick={() => saveRastreio(p.id)} style={{ fontSize: '0.6rem', letterSpacing: 1, padding: '3px 8px', cursor: 'pointer', background: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: 4 }}>SALVAR RASTREIO</button>
+                        </div>
+                      </td>
+                      <td>
+                        <select value={p.status} onChange={(e) => updatePedidoStatus(p.id, e.target.value)} className="status-select">
+                          <option value="aguardando">Aguardando</option>
+                          <option value="preparando">Preparando</option>
+                          <option value="enviado">Enviado</option>
+                          <option value="entregue">Entregue</option>
+                          <option value="cancelado">Cancelado</option>
+                        </select>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan="10" style={{ padding: 0 }}>
+                          <div style={{ background: 'rgba(255,255,255,0.025)', padding: '12px 20px', borderLeft: '3px solid var(--accent-color)' }}>
+                            <div style={{ fontSize: '0.55rem', letterSpacing: 2, opacity: 0.5, marginBottom: 8 }}>ITENS DO PEDIDO #{p.id}</div>
+                            {!itens ? (
+                              <div style={{ fontSize: '0.6rem', opacity: 0.4 }}>Carregando...</div>
+                            ) : itens.length === 0 ? (
+                              <div style={{ fontSize: '0.6rem', opacity: 0.4 }}>Sem itens</div>
+                            ) : (
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.65rem' }}>
+                                <thead>
+                                  <tr style={{ opacity: 0.5 }}>
+                                    <th style={{ textAlign: 'left', padding: '4px 8px', letterSpacing: 1 }}>PRODUTO</th>
+                                    <th style={{ textAlign: 'left', padding: '4px 8px', letterSpacing: 1 }}>LIGA</th>
+                                    <th style={{ textAlign: 'center', padding: '4px 8px', letterSpacing: 1 }}>TAM</th>
+                                    <th style={{ textAlign: 'center', padding: '4px 8px', letterSpacing: 1 }}>QTD</th>
+                                    <th style={{ textAlign: 'right', padding: '4px 8px', letterSpacing: 1 }}>PREÇO UN.</th>
+                                    <th style={{ textAlign: 'right', padding: '4px 8px', letterSpacing: 1 }}>SUBTOTAL</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {itens.map((item, idx) => (
+                                    <tr key={idx} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                      <td style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        {item.produto_img && <img src={item.produto_img} alt="" style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 3 }} />}
+                                        {item.produto_nome || `Produto #${item.produto_id}`}
+                                      </td>
+                                      <td style={{ padding: '5px 8px', opacity: 0.6 }}>{item.produto_liga || '—'}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'center', fontWeight: 600 }}>{item.tamanho?.toUpperCase() || '—'}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'center' }}>{item.quantidade}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>R$ {parseFloat(item.preco_unitario).toFixed(2)}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600 }}>R$ {(item.quantidade * item.preco_unitario).toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                            {p.endereco && (
+                              <div style={{ marginTop: 10, fontSize: '0.6rem', opacity: 0.6, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                <Package size={11} style={{ marginRight: 5 }} />
+                                <strong>ENDEREÇO:</strong> {p.endereco}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  );
+                })}
+                {pedidos.length === 0 && <tr><td colSpan="10" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>SEM PEDIDOS</td></tr>}
               </tbody>
             </table>
             </div>
+            {pedidos.length > PEDIDOS_PP && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'center', padding: '16px 0', fontSize: '0.7rem', letterSpacing: 1 }}>
+                <button onClick={() => setPedidoPage(p => Math.max(1, p-1))} disabled={pedidoPage === 1} className="btn-outline">← ANTERIOR</button>
+                <span>{pedidoPage} / {Math.ceil(pedidos.length / PEDIDOS_PP)}</span>
+                <button onClick={() => setPedidoPage(p => p+1)} disabled={pedidoPage >= Math.ceil(pedidos.length / PEDIDOS_PP)} className="btn-outline">PRÓXIMA →</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1503,13 +1780,14 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
             <h3 style={{ marginBottom: 16, fontSize: '0.75rem', letterSpacing: 3 }}><MessageSquare size={14} /> AVALIAÇÕES DE CLIENTES</h3>
             <div className="admin-table-wrapper">
             <table className="admin-table">
-              <thead><tr><th>PRODUTO</th><th>CLIENTE</th><th>NOTA</th><th>COMENTÁRIO</th><th>STATUS</th><th>AÇÕES</th></tr></thead>
+              <thead><tr><th>PRODUTO</th><th>CLIENTE</th><th>NOTA</th><th>FOTO</th><th>COMENTÁRIO</th><th>STATUS</th><th>AÇÕES</th></tr></thead>
               <tbody>
                 {avaliacoes.map(a => (
                   <tr key={a.id}>
                     <td>{a.produto_nome || `#${a.produto_id}`}</td>
                     <td>{a.nome}<br/><small style={{ opacity: 0.5 }}>{a.email}</small></td>
                     <td>{'★'.repeat(a.nota)}{'☆'.repeat(5 - a.nota)}</td>
+                    <td>{a.foto ? <img src={a.foto} alt="avaliação" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4 }} /> : '—'}</td>
                     <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.comentario || '—'}</td>
                     <td><span className={a.aprovada ? 'badge-ativo' : 'badge-inativo'}>{a.aprovada ? 'APROVADA' : 'PENDENTE'}</span></td>
                     <td>
@@ -1518,7 +1796,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                     </td>
                   </tr>
                 ))}
-                {avaliacoes.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUMA AVALIAÇÃO</td></tr>}
+                {avaliacoes.length === 0 && <tr><td colSpan="7" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUMA AVALIAÇÃO</td></tr>}
               </tbody>
             </table>
             </div>
@@ -1611,6 +1889,308 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                 {nlSubscribers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUM INSCRITO</td></tr>}
               </tbody>
             </table>
+            </div>
+          </div>
+        )}
+
+        {/* ESTOQUE TAB */}
+        {activeTab === 'estoque' && (
+          <div>
+            <h3 style={{ fontSize: '0.75rem', letterSpacing: 3, marginBottom: 16 }}>ESTOQUE BAIXO — produtos com menos unidades</h3>
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr><th>NOME</th><th>LIGA</th><th style={{ textAlign: 'center' }}>P</th><th style={{ textAlign: 'center' }}>M</th><th style={{ textAlign: 'center' }}>G</th><th style={{ textAlign: 'center' }}>GG</th></tr>
+                </thead>
+                <tbody>
+                  {(estoqueBaixo || []).map(p => {
+                    const renderStock = (v) => {
+                      if (v === -1) return <span style={{ opacity: 0.3 }}>∞</span>;
+                      if (v === 0) return <span style={{ color: '#ff4444', fontWeight: 'bold' }}>0</span>;
+                      if (v <= 3) return <span style={{ color: '#ff9800', fontWeight: 'bold' }}>{v}</span>;
+                      return <span style={{ color: '#4caf50' }}>{v}</span>;
+                    };
+                    return (
+                      <tr key={p.id}>
+                        <td>{p.nome}</td>
+                        <td style={{ opacity: 0.6, fontSize: '0.65rem' }}>{p.liga}</td>
+                        <td style={{ textAlign: 'center' }}>{renderStock(p.estoque_p)}</td>
+                        <td style={{ textAlign: 'center' }}>{renderStock(p.estoque_m)}</td>
+                        <td style={{ textAlign: 'center' }}>{renderStock(p.estoque_g)}</td>
+                        <td style={{ textAlign: 'center' }}>{renderStock(p.estoque_gg)}</td>
+                      </tr>
+                    );
+                  })}
+                  {estoqueBaixo.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUM PRODUTO COM ESTOQUE BAIXO</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <button className="action-btn" style={{ marginTop: 12 }} onClick={() => { loadedRef.current.estoque = false; loadData('estoque'); }}>↻ ATUALIZAR</button>
+          </div>
+        )}
+
+        {/* PROMOÇÕES TAB */}
+        {activeTab === 'promocoes' && (
+          <div>
+            <h3 style={{ fontSize: '0.75rem', letterSpacing: 3, marginBottom: 16 }}>BANNERS / ANÚNCIOS DO SITE</h3>
+            <p style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: 1, marginBottom: 24 }}>
+              Crie banners de anúncio que aparecem no topo do site. Use para promoções, lançamentos e campanhas.
+            </p>
+
+            {/* Form criar / editar */}
+            <form className="admin-form" onSubmit={handleAnuncioSubmit} style={{ marginBottom: 32 }}>
+              <input
+                placeholder="TÍTULO DO ANÚNCIO *"
+                required
+                value={(editingAnuncio || novoAnuncio).titulo}
+                onChange={e => {
+                  const v = e.target.value;
+                  editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, titulo: v })) : setNovoAnuncio(prev => ({ ...prev, titulo: v }));
+                }}
+              />
+              <input
+                placeholder="SUBTÍTULO (opcional)"
+                value={(editingAnuncio || novoAnuncio).subtitulo}
+                onChange={e => {
+                  const v = e.target.value;
+                  editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, subtitulo: v })) : setNovoAnuncio(prev => ({ ...prev, subtitulo: v }));
+                }}
+              />
+              <input
+                placeholder="LINK (ex: /home ou URL externa)"
+                value={(editingAnuncio || novoAnuncio).link}
+                onChange={e => {
+                  const v = e.target.value;
+                  editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, link: v })) : setNovoAnuncio(prev => ({ ...prev, link: v }));
+                }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
+                <label style={{ fontSize: '0.65rem', letterSpacing: 1 }}>
+                  COR FUNDO<br />
+                  <input type="color" value={(editingAnuncio || novoAnuncio).cor_fundo}
+                    onChange={e => { const v = e.target.value; editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, cor_fundo: v })) : setNovoAnuncio(prev => ({ ...prev, cor_fundo: v })); }}
+                    style={{ width: '100%', height: 36, cursor: 'pointer', border: 'none', padding: 2 }} />
+                </label>
+                <label style={{ fontSize: '0.65rem', letterSpacing: 1 }}>
+                  COR TEXTO<br />
+                  <input type="color" value={(editingAnuncio || novoAnuncio).cor_texto}
+                    onChange={e => { const v = e.target.value; editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, cor_texto: v })) : setNovoAnuncio(prev => ({ ...prev, cor_texto: v })); }}
+                    style={{ width: '100%', height: 36, cursor: 'pointer', border: 'none', padding: 2 }} />
+                </label>
+                <label style={{ fontSize: '0.65rem', letterSpacing: 1 }}>
+                  INÍCIO<br />
+                  <input type="date" value={(editingAnuncio || novoAnuncio).inicio || ''}
+                    onChange={e => { const v = e.target.value; editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, inicio: v })) : setNovoAnuncio(prev => ({ ...prev, inicio: v })); }}
+                    style={{ width: '100%' }} />
+                </label>
+                <label style={{ fontSize: '0.65rem', letterSpacing: 1 }}>
+                  FIM<br />
+                  <input type="date" value={(editingAnuncio || novoAnuncio).fim || ''}
+                    onChange={e => { const v = e.target.value; editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, fim: v })) : setNovoAnuncio(prev => ({ ...prev, fim: v })); }}
+                    style={{ width: '100%' }} />
+                </label>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.65rem', letterSpacing: 1, cursor: 'pointer' }}>
+                <input type="checkbox" checked={(editingAnuncio || novoAnuncio).ativo}
+                  onChange={e => { const v = e.target.checked; editingAnuncio ? setEditingAnuncio(prev => ({ ...prev, ativo: v })) : setNovoAnuncio(prev => ({ ...prev, ativo: v })); }} />
+                ATIVO (aparece no site)
+              </label>
+
+              {/* Preview */}
+              {(editingAnuncio || novoAnuncio).titulo && (
+                <div style={{
+                  background: (editingAnuncio || novoAnuncio).cor_fundo,
+                  color: (editingAnuncio || novoAnuncio).cor_texto,
+                  padding: '10px 24px', textAlign: 'center', borderRadius: 4,
+                  fontSize: '0.75rem', letterSpacing: 2
+                }}>
+                  {(editingAnuncio || novoAnuncio).titulo}
+                  {(editingAnuncio || novoAnuncio).subtitulo && (
+                    <span style={{ marginLeft: 16, opacity: 0.8, fontSize: '0.65rem' }}>{(editingAnuncio || novoAnuncio).subtitulo}</span>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit">{editingAnuncio ? 'SALVAR ALTERAÇÕES' : 'CRIAR ANÚNCIO'}</button>
+                {editingAnuncio && (
+                  <button type="button" onClick={() => setEditingAnuncio(null)}
+                    style={{ background: 'transparent', border: '1px solid var(--accent-color)', color: 'var(--text-color)' }}>
+                    CANCELAR
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {/* Lista de anúncios */}
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead><tr><th>TÍTULO</th><th>ATIVO</th><th>PERÍODO</th><th>PREVIEW</th><th>AÇÕES</th></tr></thead>
+                <tbody>
+                  {anuncios.map(a => (
+                    <tr key={a.id}>
+                      <td>
+                        <strong>{a.titulo}</strong>
+                        {a.subtitulo && <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>{a.subtitulo}</div>}
+                      </td>
+                      <td><span className={a.ativo ? 'badge-ativo' : 'badge-inativo'}>{a.ativo ? 'ATIVO' : 'INATIVO'}</span></td>
+                      <td style={{ fontSize: '0.65rem', opacity: 0.7 }}>
+                        {a.inicio ? a.inicio.split('T')[0] : '—'} → {a.fim ? a.fim.split('T')[0] : '—'}
+                      </td>
+                      <td>
+                        <div style={{
+                          background: a.cor_fundo, color: a.cor_texto,
+                          padding: '4px 12px', borderRadius: 3, fontSize: '0.6rem', letterSpacing: 1, display: 'inline-block'
+                        }}>{a.titulo}</div>
+                      </td>
+                      <td>
+                        <button className="action-btn" onClick={() => setEditingAnuncio({ ...a, inicio: a.inicio ? a.inicio.split('T')[0] : '', fim: a.fim ? a.fim.split('T')[0] : '' })}>EDITAR</button>
+                        {' '}
+                        <button className="action-btn delete" onClick={() => deleteAnuncio(a.id)}>DELETAR</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {anuncios.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUM ANÚNCIO CRIADO</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* LUCRATIVIDADE TAB */}
+        {activeTab === 'lucratividade' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: '0.75rem', letterSpacing: 3 }}><TrendingUp size={14} /> ANÁLISE DE LUCRATIVIDADE</h3>
+              <button className="action-btn" onClick={() => loadData('lucratividade', true)}>ATUALIZAR</button>
+            </div>
+
+            {/* Top 10 chart */}
+            {lucratividade.length > 0 && (
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: '0.55rem', letterSpacing: 2, opacity: 0.6, marginBottom: 12 }}>RECEITA VS CUSTO — TOP 10 PRODUTOS</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <RChart data={lucratividade.slice(0, 10).map(p => ({
+                    nome: p.nome.substring(0, 18),
+                    Receita: parseFloat(p.receita_total) || 0,
+                    Custo: parseFloat(p.custo_total) || 0,
+                    Margem: parseFloat(p.margem_total) || 0,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.5)' }} />
+                    <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.5)' }} />
+                    <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.65rem' }} formatter={(v) => `R$ ${v.toFixed(2)}`} />
+                    <Legend wrapperStyle={{ fontSize: '0.55rem' }} />
+                    <Bar dataKey="Receita" fill="#4ade80" radius={[2,2,0,0]} />
+                    <Bar dataKey="Custo" fill="#f87171" radius={[2,2,0,0]} />
+                    <Bar dataKey="Margem" fill="#60a5fa" radius={[2,2,0,0]} />
+                  </RChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead><tr><th>PRODUTO</th><th>LIGA</th><th>PREÇO</th><th>CUSTO</th><th>MARGEM %</th><th>VENDAS</th><th>RECEITA</th><th>LUCRO TOTAL</th></tr></thead>
+                <tbody>
+                  {lucratividade.map(p => {
+                    const margem = p.preco > 0 ? ((p.preco - p.custo) / p.preco * 100) : 0;
+                    const corMargem = margem >= 40 ? '#4ade80' : margem >= 20 ? '#facc15' : '#f87171';
+                    return (
+                      <tr key={p.id}>
+                        <td>{p.nome}</td>
+                        <td><small style={{ opacity: 0.5 }}>{p.liga}</small></td>
+                        <td>R$ {parseFloat(p.preco).toFixed(2)}</td>
+                        <td>R$ {parseFloat(p.custo).toFixed(2)}</td>
+                        <td><span style={{ color: corMargem, fontWeight: 600 }}>{margem.toFixed(1)}%</span></td>
+                        <td>{p.qtd_vendida || 0}</td>
+                        <td>R$ {parseFloat(p.receita_total || 0).toFixed(2)}</td>
+                        <td style={{ fontWeight: 600 }}>R$ {parseFloat(p.margem_total || 0).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                  {lucratividade.length === 0 && <tr><td colSpan="8" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>SEM DADOS. ADICIONE O CUSTO NOS PRODUTOS.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* CAMPANHAS DE EMAIL TAB */}
+        {activeTab === 'campanhas' && (
+          <div>
+            <h3 style={{ fontSize: '0.75rem', letterSpacing: 3, marginBottom: 20 }}><Send size={14} /> CAMPANHAS DE EMAIL</h3>
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 20, marginBottom: 24 }}>
+              <div style={{ fontSize: '0.55rem', letterSpacing: 2, opacity: 0.6, marginBottom: 14 }}>NOVA CAMPANHA</div>
+              <div className="editor-field">
+                <label>ASSUNTO</label>
+                <input type="text" value={novaCampanha.assunto} onChange={e => setNovaCampanha(p => ({ ...p, assunto: e.target.value }))} placeholder="Ex: Novidades da temporada — Retro Wave" />
+              </div>
+              <div className="editor-field">
+                <label>CONTEÚDO (será enviado aos assinantes da newsletter)</label>
+                <textarea rows={6} value={novaCampanha.conteudo} onChange={e => setNovaCampanha(p => ({ ...p, conteudo: e.target.value }))} placeholder="Texto do email..." />
+              </div>
+              <div className="editor-field">
+                <label>AGENDAR PARA (opcional — deixe em branco para salvar como rascunho)</label>
+                <input type="datetime-local" value={novaCampanha.agendado_para} onChange={e => setNovaCampanha(p => ({ ...p, agendado_para: e.target.value }))} />
+              </div>
+              <button
+                className="editor-save-btn"
+                disabled={!novaCampanha.assunto || !novaCampanha.conteudo}
+                onClick={async () => {
+                  try {
+                    const res = await adminFetch(`${API_URL}/api/admin/campanhas`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ assunto: novaCampanha.assunto, conteudo: novaCampanha.conteudo, agendado_para: novaCampanha.agendado_para || null })
+                    });
+                    const d = await res.json();
+                    if (d.success) {
+                      showToast('Campanha salva!');
+                      setNovaCampanha({ assunto: '', conteudo: '', agendado_para: '' });
+                      loadData('campanhas', true);
+                    }
+                  } catch { showToast('Erro ao salvar campanha'); }
+                }}
+              >
+                {novaCampanha.agendado_para ? 'AGENDAR ENVIO' : 'SALVAR RASCUNHO'}
+              </button>
+            </div>
+
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead><tr><th>ASSUNTO</th><th>STATUS</th><th>AGENDADO</th><th>ENVIADO EM</th><th>DESTINATÁRIOS</th><th>AÇÕES</th></tr></thead>
+                <tbody>
+                  {campanhas.map(c => (
+                    <tr key={c.id}>
+                      <td>{c.assunto}</td>
+                      <td><span className={c.status === 'enviado' ? 'badge-ativo' : c.status === 'agendado' ? 'pedido-status enviado' : 'badge-inativo'}>{c.status.toUpperCase()}</span></td>
+                      <td>{c.agendado_para ? new Date(c.agendado_para).toLocaleString('pt-BR') : '—'}</td>
+                      <td>{c.enviado_em ? new Date(c.enviado_em).toLocaleString('pt-BR') : '—'}</td>
+                      <td>{c.destinatarios || 0}</td>
+                      <td>
+                        {c.status !== 'enviado' && (
+                          <button className="action-btn" onClick={async () => {
+                            if (!window.confirm(`Enviar campanha "${c.assunto}" agora para todos os assinantes?`)) return;
+                            try {
+                              const res = await adminFetch(`${API_URL}/api/admin/campanhas/${c.id}/enviar`, { method: 'POST' });
+                              const d = await res.json();
+                              if (d.success) { showToast(`Enviado para ${d.enviados} assinantes!`); loadData('campanhas', true); }
+                            } catch { showToast('Erro ao enviar'); }
+                          }}>ENVIAR AGORA</button>
+                        )}
+                        {' '}
+                        <button className="action-btn delete" onClick={async () => {
+                          await adminFetch(`${API_URL}/api/admin/campanhas/${c.id}`, { method: 'DELETE' });
+                          showToast('Campanha deletada');
+                          loadData('campanhas', true);
+                        }}>DELETAR</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {campanhas.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUMA CAMPANHA CRIADA</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

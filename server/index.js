@@ -7,41 +7,30 @@ const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ═══════════════════════════════════════════════════════
-// AUTH — Tokens de sessão admin em memória
+// AUTH — JWT persistente (sobrevive ao restart)
 // ═══════════════════════════════════════════════════════
-const adminTokens = new Map(); // token -> { adminId, createdAt }
-const TOKEN_TTL = 24 * 60 * 60 * 1000; // 24h
+const JWT_SECRET = process.env.JWT_SECRET || 'retrowave-jwt-secret-change-me-in-production';
 
 function generateAdminToken(adminId) {
-    const token = crypto.randomUUID();
-    adminTokens.set(token, { adminId, createdAt: Date.now() });
-    return token;
+    return jwt.sign({ adminId, type: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
 }
 
 function requireAdmin(req, res, next) {
     const token = req.headers['x-admin-token'];
-    if (!token || !adminTokens.has(token)) {
-        return res.status(401).json({ error: 'Não autorizado' });
+    if (!token) return res.status(401).json({ error: 'Não autorizado' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.type !== 'admin') return res.status(401).json({ error: 'Não autorizado' });
+        req.adminId = decoded.adminId;
+        next();
+    } catch {
+        return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
     }
-    const session = adminTokens.get(token);
-    if (Date.now() - session.createdAt > TOKEN_TTL) {
-        adminTokens.delete(token);
-        return res.status(401).json({ error: 'Sessão expirada' });
-    }
-    req.adminId = session.adminId;
-    next();
 }
-
-// Limpar tokens expirados a cada hora
-setInterval(() => {
-    const now = Date.now();
-    for (const [token, session] of adminTokens) {
-        if (now - session.createdAt > TOKEN_TTL) adminTokens.delete(token);
-    }
-}, 60 * 60 * 1000);
 
 const app = express();
 
@@ -88,8 +77,8 @@ async function sendEmail(to, subject, html) {
   return info;
 }
 
-function buildOrderEmailHtml(pedidoId, nome, itens, total, status) {
-  const statusLabel = { concluido: 'Confirmado', preparando: 'Em preparação', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
+function buildOrderEmailHtml(pedidoId, nome, itens, total, status, extraHtml = '') {
+  const statusLabel = { aguardando: 'Aguardando Envio', concluido: 'Confirmado', preparando: 'Em preparação', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
   const itemsHtml = itens.map(i =>
     `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${i.nome} (TAM ${i.tamanho}) × ${i.quantidade}</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #eee">R$ ${(parseFloat(i.preco_unitario) * i.quantidade).toFixed(2)}</td></tr>`
   ).join('');
@@ -104,6 +93,7 @@ function buildOrderEmailHtml(pedidoId, nome, itens, total, status) {
         <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;letter-spacing:1px">
           STATUS: <strong>${statusLabel[status] || status.toUpperCase()}</strong>
         </div>
+        ${extraHtml}
         ${itens.length > 0 ? `
         <table style="width:100%;border-collapse:collapse;font-size:14px">
           ${itemsHtml}
@@ -210,6 +200,24 @@ db.query(`CREATE TABLE IF NOT EXISTS carrinhos_abandonados (
 )`);
 // H-3: garantir unique key mesmo em tabelas já existentes
 db.query(`ALTER TABLE carrinhos_abandonados ADD UNIQUE KEY IF NOT EXISTS uq_email (email)`, () => {});
+
+// Colunas de rastreio nos pedidos
+db.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS codigo_rastreio VARCHAR(100) DEFAULT NULL`, () => {});
+db.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_envio DATE DEFAULT NULL`, () => {});
+
+// Anúncios / Promoções do site (aba Admin Promoções)
+db.query(`CREATE TABLE IF NOT EXISTS anuncios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    titulo VARCHAR(255) NOT NULL,
+    subtitulo VARCHAR(255) DEFAULT '',
+    cor_fundo VARCHAR(20) DEFAULT '#111',
+    cor_texto VARCHAR(20) DEFAULT '#fff',
+    link VARCHAR(500) DEFAULT '',
+    ativo TINYINT DEFAULT 1,
+    inicio DATE DEFAULT NULL,
+    fim DATE DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`);
 
 // Newsletter subscribers
 db.query(`CREATE TABLE IF NOT EXISTS newsletter (
@@ -480,7 +488,7 @@ app.post('/api/checkout', (req, res) => {
                             if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro no servidor' }); });
 
                             const prosseguir = (userId) => {
-                                conn.query('INSERT INTO pedidos (usuario_id, total) VALUES (?, ?)', [userId, totalFinal.toFixed(2)], (err, result) => {
+                                conn.query('INSERT INTO pedidos (usuario_id, total, status) VALUES (?, ?, ?)', [userId, totalFinal.toFixed(2), 'aguardando'], (err, result) => {
                                     if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao criar pedido' }); });
                                     const pedidoId = result.insertId;
 
@@ -726,7 +734,7 @@ app.put('/api/carrinho-abandonado/recuperar', (req, res) => {
 // ═══════════════════════════════════════════════════════
 app.get('/api/produtos/:id/avaliacoes', (req, res) => {
     db.query(
-        'SELECT id, nome, nota, comentario, created_at FROM avaliacoes WHERE produto_id = ? AND aprovada = 1 ORDER BY created_at DESC LIMIT 20',
+        'SELECT id, nome, nota, comentario, foto, created_at FROM avaliacoes WHERE produto_id = ? AND aprovada = 1 ORDER BY created_at DESC LIMIT 20',
         [req.params.id],
         (err, rows) => {
             if (err) return res.status(500).json([]);
@@ -736,13 +744,15 @@ app.get('/api/produtos/:id/avaliacoes', (req, res) => {
 });
 
 app.post('/api/avaliacoes', (req, res) => {
-    const { produto_id, nome, email, nota, comentario } = req.body;
+    const { produto_id, nome, email, nota, comentario, foto } = req.body;
     if (!produto_id || !nome || !email || !nota || nota < 1 || nota > 5) {
         return res.status(400).json({ error: 'Dados inválidos' });
     }
+    // Limit photo size to ~2MB in base64
+    const fotoData = foto && foto.length < 3000000 ? foto : null;
     db.query(
-        'INSERT INTO avaliacoes (produto_id, nome, email, nota, comentario, aprovada) VALUES (?, ?, ?, ?, ?, 0)',
-        [produto_id, nome, email, nota, comentario || null],
+        'INSERT INTO avaliacoes (produto_id, nome, email, nota, comentario, foto, aprovada) VALUES (?, ?, ?, ?, ?, ?, 0)',
+        [produto_id, nome, email, nota, comentario || null, fotoData],
         (err) => {
             if (err) return res.status(500).json({ error: 'Erro ao salvar avaliação' });
             res.json({ success: true, message: 'Avaliação enviada e aguardando aprovação' });
@@ -944,10 +954,11 @@ app.post('/api/admin/produtos', (req, res) => {
     const promo_tipo = req.body.promo_tipo || 'porcentagem';
     const promo_inicio = req.body.promo_inicio || null;
     const promo_fim = req.body.promo_fim || null;
+    const custo = parseFloat(req.body.custo) || 0;
 
     db.query(
-        'INSERT INTO produtos (nome, liga, preco, imagem, descricao, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p, estoque_m, estoque_g, estoque_gg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [nome, liga, preco, imagem || '', descricao || null, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p ?? -1, estoque_m ?? -1, estoque_g ?? -1, estoque_gg ?? -1], (err, result) => {
+        'INSERT INTO produtos (nome, liga, preco, imagem, descricao, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p, estoque_m, estoque_g, estoque_gg, custo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [nome, liga, preco, imagem || '', descricao || null, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p ?? 0, estoque_m ?? 0, estoque_g ?? 0, estoque_gg ?? 0, custo], (err, result) => {
             if (err) return res.status(500).json({ error: 'Erro ao cadastrar' });
             const produtoId = result.insertId;
 
@@ -984,6 +995,7 @@ app.put('/api/admin/produtos/:id', (req, res) => {
     if (req.body.estoque_m !== undefined) { fields.push('estoque_m = ?'); values.push(req.body.estoque_m); }
     if (req.body.estoque_g !== undefined) { fields.push('estoque_g = ?'); values.push(req.body.estoque_g); }
     if (req.body.estoque_gg !== undefined) { fields.push('estoque_gg = ?'); values.push(req.body.estoque_gg); }
+    if (req.body.custo !== undefined) { fields.push('custo = ?'); values.push(parseFloat(req.body.custo) || 0); }
 
     if (fields.length === 0) return res.status(400).json({ error: 'Nenhum campo' });
     values.push(id);
@@ -1098,12 +1110,17 @@ app.delete('/api/admin/despesas/:id', (req, res) => {
     });
 });
 
-// Pedidos recentes
+// Pedidos recentes (com rastreio e data_envio)
 app.get('/api/admin/pedidos', (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
     db.query(
-        `SELECT p.id, p.total, p.status, p.created_at, u.nome, u.email
+        `SELECT p.id, p.total, p.status, p.created_at, p.codigo_rastreio, p.data_envio,
+                u.nome, u.email, u.endereco
          FROM pedidos p LEFT JOIN usuarios u ON p.usuario_id = u.id
-         ORDER BY p.created_at DESC LIMIT 20`,
+         ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
+        [limit, offset],
         (err, results) => {
             if (err) return res.status(500).json({ error: 'Erro' });
             res.json(results);
@@ -1115,28 +1132,61 @@ app.get('/api/admin/pedidos', (req, res) => {
 app.put('/api/admin/pedidos/:id/status', (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    const statusValidos = ['concluido', 'preparando', 'enviado', 'entregue', 'cancelado'];
+    const statusValidos = ['aguardando', 'preparando', 'enviado', 'entregue', 'cancelado'];
     if (!statusValidos.includes(status)) {
         return res.status(400).json({ error: 'Status inválido' });
     }
     db.query('UPDATE pedidos SET status = ? WHERE id = ?', [status, id], (err) => {
         if (err) return res.status(500).json({ error: 'Erro ao atualizar status' });
-        // Send email notification to customer
+
+        // Buscar rastreio + dados cliente para email
         db.query(
-            `SELECT p.total, u.email, u.nome FROM pedidos p
-             JOIN usuarios u ON p.usuario_id = u.id WHERE p.id = ?`,
+            `SELECT p.total, p.codigo_rastreio, p.data_envio, u.email, u.nome
+             FROM pedidos p JOIN usuarios u ON p.usuario_id = u.id WHERE p.id = ?`,
             [id],
             (err2, rows) => {
                 if (!err2 && rows.length > 0) {
-                    const { email, nome, total } = rows[0];
-                    sendEmail(email, `Atualização do Pedido #${id} — Retro Wave`,
-                        buildOrderEmailHtml(id, nome, [], total, status))
-                        .catch(err => console.error('Email status erro:', err.message));
+                    const { email, nome, total, codigo_rastreio, data_envio } = rows[0];
+                    // Email especial para "enviado" com código de rastreio
+                    let assunto = `Atualização do Pedido #${id} — Retro Wave`;
+                    let extra = '';
+                    if (status === 'enviado' && codigo_rastreio) {
+                        assunto = `Seu Pedido #${id} foi enviado! — Retro Wave`;
+                        const dtEnvio = data_envio ? new Date(data_envio).toLocaleDateString('pt-BR') : null;
+                        extra = `
+                            <div style="background:#f0f9f0;border:1px solid #4caf50;border-radius:8px;padding:16px 20px;margin:20px 0">
+                                <p style="margin:0 0 8px;font-weight:bold;color:#2e7d32">📦 Código de Rastreio:</p>
+                                <p style="margin:0;font-size:18px;font-family:monospace;letter-spacing:2px">${codigo_rastreio}</p>
+                                ${dtEnvio ? `<p style="margin:8px 0 0;font-size:12px;color:#555">Enviado em: ${dtEnvio}</p>` : ''}
+                                <a href="https://rastreamento.correios.com.br/app/index.php?objetos=${codigo_rastreio}"
+                                   style="display:inline-block;margin-top:12px;background:#2e7d32;color:#fff;padding:8px 16px;border-radius:4px;text-decoration:none;font-size:12px;letter-spacing:1px">
+                                   RASTREAR PELO SITE DOS CORREIOS
+                                </a>
+                            </div>`;
+                    }
+                    // Injetar extra no email
+                    const html = buildOrderEmailHtml(id, nome, [], total, status, extra);
+                    sendEmail(email, assunto, html)
+                        .catch(e => console.error('Email status erro:', e.message));
                 }
             }
         );
         res.json({ success: true });
     });
+});
+
+// Atualizar código de rastreio e data de envio (Admin)
+app.put('/api/admin/pedidos/:id/rastreio', (req, res) => {
+    const { id } = req.params;
+    const { codigo_rastreio, data_envio } = req.body;
+    db.query(
+        'UPDATE pedidos SET codigo_rastreio = ?, data_envio = ? WHERE id = ?',
+        [codigo_rastreio || null, data_envio || null, id],
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Erro ao salvar rastreio' });
+            res.json({ success: true });
+        }
+    );
 });
 
 // ═══════════════════════════════════════════════════════
@@ -1494,6 +1544,333 @@ app.post('/api/admin/email/test', requireAdmin, async (req, res) => {
         res.status(500).json({ error: `Falha ao enviar: ${err.message}` });
     }
 });
+
+// ═══════════════════════════════════════════════════════
+// PRODUTOS RELACIONADOS (pública)
+// ═══════════════════════════════════════════════════════
+app.get('/api/produtos/:id/relacionados', (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!id) return res.json([]);
+    db.query('SELECT liga FROM produtos WHERE id = ?', [id], (err, rows) => {
+        if (err || !rows.length) return res.json([]);
+        const liga = rows[0].liga;
+        const hoje = new Date().toISOString().split('T')[0];
+        db.query(
+            `SELECT id, nome, preco, liga, imagem, promo_desconto, promo_tipo, promo_inicio, promo_fim,
+                    estoque_p, estoque_m, estoque_g, estoque_gg
+             FROM produtos
+             WHERE liga = ? AND id != ?
+             ORDER BY cliques DESC, id DESC
+             LIMIT 4`,
+            [liga, id],
+            (err2, produtos) => {
+                if (err2) return res.json([]);
+                const result = produtos.map(p => {
+                    const promoAtiva = p.promo_desconto && p.promo_inicio && p.promo_fim
+                        && p.promo_inicio <= hoje && p.promo_fim >= hoje;
+                    let precoFinal = parseFloat(p.preco);
+                    if (promoAtiva) {
+                        precoFinal = p.promo_tipo === 'porcentagem'
+                            ? precoFinal * (1 - p.promo_desconto / 100)
+                            : precoFinal - p.promo_desconto;
+                    }
+                    return { ...p, promoAtiva, precoFinal: precoFinal.toFixed(2) };
+                });
+                res.json(result);
+            }
+        );
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// ESTOQUE BAIXO (admin)
+// ═══════════════════════════════════════════════════════
+app.get('/api/admin/produtos/estoque-baixo', requireAdmin, (req, res) => {
+    const limite = Math.min(parseInt(req.query.limite) || 20, 100);
+    db.query(
+        `SELECT id, nome, liga, estoque_p, estoque_m, estoque_g, estoque_gg,
+                LEAST(
+                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
+                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
+                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
+                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
+                ) AS menor_estoque
+         FROM produtos
+         WHERE (estoque_p >= 0 OR estoque_m >= 0 OR estoque_g >= 0 OR estoque_gg >= 0)
+         ORDER BY LEAST(
+                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
+                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
+                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
+                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
+                 ) ASC
+         LIMIT ?`,
+        [limite],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: 'Erro ao buscar estoque' });
+            res.json(rows);
+        }
+    );
+});
+
+// ═══════════════════════════════════════════════════════
+// ANÚNCIOS / PROMOÇÕES BANNER (admin CRUD + público)
+// ═══════════════════════════════════════════════════════
+
+// Público: retorna anúncio ativo agora
+app.get('/api/anuncios/ativo', (req, res) => {
+    const hoje = new Date().toISOString().split('T')[0];
+    db.query(
+        `SELECT id, titulo, subtitulo, cor_fundo, cor_texto, link
+         FROM anuncios
+         WHERE ativo = 1 AND (inicio IS NULL OR inicio <= ?) AND (fim IS NULL OR fim >= ?)
+         ORDER BY created_at DESC LIMIT 1`,
+        [hoje, hoje],
+        (err, rows) => {
+            if (err) return res.json(null);
+            res.json(rows[0] || null);
+        }
+    );
+});
+
+// Admin: listar todos
+app.get('/api/admin/anuncios', requireAdmin, (req, res) => {
+    db.query('SELECT * FROM anuncios ORDER BY created_at DESC', (err, rows) => {
+        if (err) return res.status(500).json([]);
+        res.json(rows);
+    });
+});
+
+// Admin: criar
+app.post('/api/admin/anuncios', requireAdmin, (req, res) => {
+    const { titulo, subtitulo, cor_fundo, cor_texto, link, ativo, inicio, fim } = req.body;
+    if (!titulo) return res.status(400).json({ error: 'Título obrigatório' });
+    db.query(
+        `INSERT INTO anuncios (titulo, subtitulo, cor_fundo, cor_texto, link, ativo, inicio, fim)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [titulo, subtitulo || '', cor_fundo || '#111', cor_texto || '#fff',
+         link || '', ativo ? 1 : 0, inicio || null, fim || null],
+        (err, result) => {
+            if (err) return res.status(500).json({ error: 'Erro ao criar anúncio' });
+            res.json({ id: result.insertId, ok: true });
+        }
+    );
+});
+
+// Admin: atualizar
+app.put('/api/admin/anuncios/:id', requireAdmin, (req, res) => {
+    const id = parseInt(req.params.id);
+    const { titulo, subtitulo, cor_fundo, cor_texto, link, ativo, inicio, fim } = req.body;
+    if (!titulo) return res.status(400).json({ error: 'Título obrigatório' });
+    db.query(
+        `UPDATE anuncios SET titulo=?, subtitulo=?, cor_fundo=?, cor_texto=?, link=?, ativo=?, inicio=?, fim=?
+         WHERE id=?`,
+        [titulo, subtitulo || '', cor_fundo || '#111', cor_texto || '#fff',
+         link || '', ativo ? 1 : 0, inicio || null, fim || null, id],
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Erro ao atualizar anúncio' });
+            res.json({ ok: true });
+        }
+    );
+});
+
+// Admin: deletar
+app.delete('/api/admin/anuncios/:id', requireAdmin, (req, res) => {
+    const id = parseInt(req.params.id);
+    db.query('DELETE FROM anuncios WHERE id = ?', [id], (err) => {
+        if (err) return res.status(500).json({ error: 'Erro ao deletar anúncio' });
+        res.json({ ok: true });
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// ALERTAS EM TEMPO REAL (admin polling)
+// ═══════════════════════════════════════════════════════
+app.get('/api/admin/alertas', requireAdmin, (req, res) => {
+    const desde = req.query.desde;
+    const queries = [
+        // pedidos novos desde última verificação
+        desde
+            ? db.promise().query('SELECT id, total, created_at FROM pedidos WHERE created_at > ? ORDER BY created_at DESC LIMIT 10', [desde])
+            : db.promise().query('SELECT id, total, created_at FROM pedidos ORDER BY created_at DESC LIMIT 5'),
+        // produtos com estoque baixo (<=3 units)
+        db.promise().query(
+            `SELECT id, nome, liga,
+                LEAST(
+                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
+                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
+                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
+                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
+                ) AS menor_estoque
+             FROM produtos
+             WHERE (estoque_p BETWEEN 0 AND 3) OR (estoque_m BETWEEN 0 AND 3)
+                OR (estoque_g BETWEEN 0 AND 3) OR (estoque_gg BETWEEN 0 AND 3)
+             ORDER BY menor_estoque ASC LIMIT 20`
+        )
+    ];
+    Promise.all(queries)
+        .then(([[pedidosRows], [estoqueRows]]) => {
+            res.json({ pedidos: pedidosRows, estoqueBaixo: estoqueRows });
+        })
+        .catch(() => res.status(500).json({ pedidos: [], estoqueBaixo: [] }));
+});
+
+// ═══════════════════════════════════════════════════════
+// ITENS DE PEDIDO (admin detalhe)
+// ═══════════════════════════════════════════════════════
+app.get('/api/admin/pedidos/:id/itens', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    db.query(
+        `SELECT ip.produto_id, ip.quantidade, ip.tamanho, ip.preco_unitario,
+                p.nome AS produto_nome, p.liga AS produto_liga, p.imagem AS produto_img
+         FROM itens_pedido ip
+         LEFT JOIN produtos p ON ip.produto_id = p.id
+         WHERE ip.pedido_id = ?`,
+        [id],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: 'Erro' });
+            res.json(rows);
+        }
+    );
+});
+
+// ═══════════════════════════════════════════════════════
+// LUCRATIVIDADE (análise de margem)
+// ═══════════════════════════════════════════════════════
+
+// Garantir que a coluna custo existe na tabela produtos
+db.query('ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo DECIMAL(10,2) DEFAULT 0', () => {});
+
+app.get('/api/admin/lucratividade', requireAdmin, (req, res) => {
+    db.query(
+        `SELECT p.id, p.nome, p.liga, p.preco, COALESCE(p.custo, 0) AS custo,
+                COUNT(ip.produto_id) AS qtd_vendida,
+                SUM(ip.quantidade * ip.preco_unitario) AS receita_total,
+                SUM(ip.quantidade * COALESCE(p.custo, 0)) AS custo_total,
+                SUM(ip.quantidade * (ip.preco_unitario - COALESCE(p.custo, 0))) AS margem_total
+         FROM produtos p
+         LEFT JOIN itens_pedido ip ON ip.produto_id = p.id
+         LEFT JOIN pedidos ped ON ip.pedido_id = ped.id AND ped.status NOT IN ('cancelado')
+         GROUP BY p.id, p.nome, p.liga, p.preco, p.custo
+         ORDER BY margem_total DESC
+         LIMIT 50`,
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: 'Erro' });
+            res.json(rows);
+        }
+    );
+});
+
+app.put('/api/admin/produtos/:id/custo', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const { custo } = req.body;
+    db.query('UPDATE produtos SET custo = ? WHERE id = ?', [parseFloat(custo) || 0, id], (err) => {
+        if (err) return res.status(500).json({ error: 'Erro' });
+        res.json({ success: true });
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// REVIEWS COM FOTO
+// ═══════════════════════════════════════════════════════
+db.query('ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL', () => {});
+
+// ═══════════════════════════════════════════════════════
+// CAMPANHAS DE EMAIL (Marketing Automation)
+// ═══════════════════════════════════════════════════════
+db.query(`CREATE TABLE IF NOT EXISTS campanhas_email (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    assunto VARCHAR(255) NOT NULL,
+    conteudo TEXT NOT NULL,
+    agendado_para DATETIME DEFAULT NULL,
+    enviado_em DATETIME DEFAULT NULL,
+    destinatarios INT DEFAULT 0,
+    status ENUM('rascunho','agendado','enviado') DEFAULT 'rascunho',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`, () => {});
+
+app.get('/api/admin/campanhas', requireAdmin, (req, res) => {
+    db.query('SELECT * FROM campanhas_email ORDER BY created_at DESC LIMIT 50', (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Erro' });
+        res.json(rows);
+    });
+});
+
+app.post('/api/admin/campanhas', requireAdmin, (req, res) => {
+    const { assunto, conteudo, agendado_para } = req.body;
+    if (!assunto || !conteudo) return res.status(400).json({ error: 'Campos obrigatórios' });
+    const status = agendado_para ? 'agendado' : 'rascunho';
+    db.query(
+        'INSERT INTO campanhas_email (assunto, conteudo, agendado_para, status) VALUES (?, ?, ?, ?)',
+        [assunto, conteudo, agendado_para || null, status],
+        (err, result) => {
+            if (err) return res.status(500).json({ error: 'Erro' });
+            res.json({ success: true, id: result.insertId });
+        }
+    );
+});
+
+app.post('/api/admin/campanhas/:id/enviar', requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [rows] = await db.promise().query('SELECT * FROM campanhas_email WHERE id = ?', [id]);
+        if (!rows.length) return res.status(404).json({ error: 'Campanha não encontrada' });
+        const campanha = rows[0];
+        const [subs] = await db.promise().query("SELECT email, nome FROM newsletter WHERE ativo = 1");
+        let enviados = 0;
+        for (const sub of subs) {
+            const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+                <h2 style="letter-spacing:2px">${campanha.assunto}</h2>
+                <div style="line-height:1.7;color:#333">${campanha.conteudo.replace(/\n/g, '<br>')}</div>
+                <hr style="margin:30px 0;border:none;border-top:1px solid #eee">
+                <p style="font-size:11px;color:#999">
+                    <a href="${process.env.SITE_URL || 'http://localhost:5173'}/unsubscribe?email=${encodeURIComponent(sub.email)}" style="color:#999">Cancelar inscrição</a>
+                </p>
+            </div>`;
+            try {
+                await sendEmail(sub.email, campanha.assunto, html);
+                enviados++;
+            } catch {}
+        }
+        await db.promise().query(
+            'UPDATE campanhas_email SET status = ?, enviado_em = NOW(), destinatarios = ? WHERE id = ?',
+            ['enviado', enviados, id]
+        );
+        res.json({ success: true, enviados });
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao enviar' });
+    }
+});
+
+app.delete('/api/admin/campanhas/:id', requireAdmin, (req, res) => {
+    db.query('DELETE FROM campanhas_email WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: 'Erro' });
+        res.json({ ok: true });
+    });
+});
+
+// Verificar campanhas agendadas (a cada 60s)
+setInterval(async () => {
+    try {
+        const [rows] = await db.promise().query(
+            "SELECT * FROM campanhas_email WHERE status = 'agendado' AND agendado_para <= NOW()"
+        );
+        for (const campanha of rows) {
+            const [subs] = await db.promise().query("SELECT email, nome FROM newsletter WHERE ativo = 1");
+            let enviados = 0;
+            for (const sub of subs) {
+                const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+                    <h2 style="letter-spacing:2px">${campanha.assunto}</h2>
+                    <div style="line-height:1.7">${campanha.conteudo.replace(/\n/g, '<br>')}</div>
+                </div>`;
+                try { await sendEmail(sub.email, campanha.assunto, html); enviados++; } catch {}
+            }
+            await db.promise().query(
+                'UPDATE campanhas_email SET status = ?, enviado_em = NOW(), destinatarios = ? WHERE id = ?',
+                ['enviado', enviados, campanha.id]
+            );
+        }
+    } catch {}
+}, 60000);
 
 // ═══════════════════════════════════════════════════════
 // SERVIDOR

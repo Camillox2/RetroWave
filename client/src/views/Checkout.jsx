@@ -10,7 +10,9 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
 
   const navigate = useNavigate();
   const { t } = useI18n();
-  const [formData, setFormData] = useState({ email: '', nome: '', endereco: '' });
+  const [formData, setFormData] = useState({ email: '', nome: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepErro, setCepErro] = useState('');
   const [consentLgpd, setConsentLgpd] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
@@ -35,6 +37,26 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
     else desconto = Math.min(cupomData.valor, subtotal);
   }
   const total = Math.max(0, subtotal - desconto + freteValor);
+
+  const buscarCep = async (cep) => {
+    const clean = cep.replace(/\D/g, '');
+    if (clean.length !== 8) return;
+    setCepLoading(true);
+    setCepErro('');
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) { setCepErro('CEP n\u00e3o encontrado'); return; }
+      setFormData(prev => ({
+        ...prev,
+        logradouro: data.logradouro || '',
+        bairro: data.bairro || '',
+        cidade: data.localidade || '',
+        estado: data.uf || ''
+      }));
+    } catch { setCepErro('Erro ao buscar CEP'); }
+    finally { setCepLoading(false); }
+  };
 
   const validarCupom = async () => {
     if (!cupomCode.trim()) return;
@@ -67,7 +89,14 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
       const res = await fetch(`${API_URL}/api/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, carrinho: cart, total, cupomCodigo: cupomData?.codigo || null })
+        body: JSON.stringify({
+          email: formData.email,
+          nome: formData.nome,
+          endereco: [formData.logradouro, formData.numero, formData.complemento, formData.bairro, formData.cidade + (formData.estado ? ' - ' + formData.estado : ''), `CEP ${formData.cep}`].filter(Boolean).join(', '),
+          carrinho: cart,
+          total,
+          cupomCodigo: cupomData?.codigo || null
+        })
       });
 
       const data = await res.json();
@@ -171,19 +200,86 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
             <input
               className="checkout-input"
               type="text"
-              placeholder={t('checkout.name')}
+              placeholder={t('checkout.name') || 'Nome completo'}
               required
               value={formData.nome}
               onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             />
-            <textarea
+
+            {/* CEP + auto-fill */}
+            <div className="checkout-cep-row">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  className="checkout-input"
+                  type="text"
+                  placeholder="CEP"
+                  required
+                  maxLength={9}
+                  style={{ flex: 1 }}
+                  value={formData.cep}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g,'').replace(/(\d{5})(\d)/,'$1-$2').slice(0,9);
+                    setFormData({ ...formData, cep: v });
+                  }}
+                  onBlur={(e) => buscarCep(e.target.value)}
+                />
+                {cepLoading && <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>buscando...</span>}
+              </div>
+              {cepErro && <span style={{ fontSize: '0.65rem', color: '#ff4444', letterSpacing: 1 }}>{cepErro}</span>}
+            </div>
+
+            <input
               className="checkout-input"
-              placeholder={t('checkout.address')}
+              type="text"
+              placeholder="Logradouro (Rua, Av.)"
               required
-              value={formData.endereco}
-              onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-              style={{ minHeight: '100px', resize: 'vertical' }}
+              value={formData.logradouro}
+              onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
             />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+              <input
+                className="checkout-input"
+                type="text"
+                placeholder="Número"
+                required
+                value={formData.numero}
+                onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+              />
+              <input
+                className="checkout-input"
+                type="text"
+                placeholder="Complemento (opcional)"
+                value={formData.complemento}
+                onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
+              />
+            </div>
+            <input
+              className="checkout-input"
+              type="text"
+              placeholder="Bairro"
+              required
+              value={formData.bairro}
+              onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+              <input
+                className="checkout-input"
+                type="text"
+                placeholder="Cidade"
+                required
+                value={formData.cidade}
+                onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+              />
+              <input
+                className="checkout-input"
+                type="text"
+                placeholder="Estado"
+                required
+                maxLength={2}
+                value={formData.estado}
+                onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
+              />
+            </div>
 
             <div className="checkout-cupom-row">
               <div className="checkout-cupom-input-wrap">

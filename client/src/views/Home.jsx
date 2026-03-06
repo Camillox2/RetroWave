@@ -3,7 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/index.jsx';
 import { API_URL } from '../config.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, ChevronLeft, ChevronRight, Pin, Percent, Heart, Share2, Star, Send, Copy } from 'lucide-react';
+import { X, ShoppingBag, ChevronLeft, ChevronRight, Pin, Percent, Heart, Share2, Star, Send, Copy, AlertTriangle, Camera } from 'lucide-react';
+
+// ═══════════════════════════════════════
+// PROMO COUNTDOWN — Contagem regressiva
+// ═══════════════════════════════════════
+function PromoCountdown({ fim }) {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    const end = new Date(fim + 'T23:59:59');
+    const calc = () => {
+      const diff = end - new Date();
+      if (diff <= 0) { setTimeLeft(''); return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      if (d > 0) setTimeLeft(`${d}d ${String(h).padStart(2,'0')}h`);
+      else setTimeLeft(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+    };
+    calc();
+    const t = setInterval(calc, 1000);
+    return () => clearInterval(t);
+  }, [fim]);
+
+  if (!timeLeft) return null;
+  return <span className="promo-countdown">⏱ {timeLeft}</span>;
+}
 const CACHE_KEY = 'retrowave_produtos_v3';
 const CACHE_TS_KEY = 'retrowave_produtos_v3_ts';
 const CACHE_TTL = 10 * 60 * 1000;
@@ -101,7 +128,8 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
-  const [reviewForm, setReviewForm] = useState({ nome: '', email: '', nota: 5, comentario: '' });
+  const [reviewForm, setReviewForm] = useState({ nome: '', email: '', nota: 5, comentario: '', foto: null });
+  const [reviewFotoPreview, setReviewFotoPreview] = useState(null);
   const [reviewSending, setReviewSending] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
 
@@ -112,6 +140,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
     setZoomed(false);
     setShowReviewForm(false);
     setShareMsg('');
+    setReviewFotoPreview(null);
 
     if (produto.imgCount > 0) {
       fetch(`${API_URL}/api/produtos/${produto.id}/imagens`)
@@ -187,11 +216,35 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
         body: JSON.stringify({ ...reviewForm, produto_id: produto.id })
       });
       setShowReviewForm(false);
-      setReviewForm({ nome: '', email: '', nota: 5, comentario: '' });
+      setReviewForm({ nome: '', email: '', nota: 5, comentario: '', foto: null });
+      setReviewFotoPreview(null);
       // Reload reviews
       const res = await fetch(`${API_URL}/api/produtos/${produto.id}/avaliacoes`);
       setReviews(await res.json());
     } catch {} finally { setReviewSending(false); }
+  };
+
+  const handleReviewFoto = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      // Resize/compress via canvas to max 800px
+      const img = new window.Image();
+      img.onload = () => {
+        const maxW = 800;
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const b64 = canvas.toDataURL('image/jpeg', 0.75);
+        setReviewFotoPreview(b64);
+        setReviewForm(p => ({ ...p, foto: b64 }));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const avgRating = reviews.length > 0 ? (reviews.reduce((a, r) => a + r.nota, 0) / reviews.length).toFixed(1) : null;
@@ -209,7 +262,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 
         {/* Image side */}
         <div className="modal-image-section">
-          {promoAtiva && <div className="modal-promo-badge">{t('home.promo')} {produto.promoLabel}</div>}
+          {promoAtiva && <div className="modal-promo-badge">{t('home.promo')} {produto.promoLabel}{produto.promo_fim && <PromoCountdown fim={produto.promo_fim} />}</div>}
           {!!produto.destaque && <div className="modal-destaque-badge"><Pin size={12} /> {t('home.highlight')}</div>}
 
           {/* Favorite button (C1) */}
@@ -336,6 +389,19 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
                     ))}
                   </div>
                   <textarea placeholder={t('home.review_comment').toUpperCase()} value={reviewForm.comentario} onChange={e => setReviewForm(p => ({ ...p, comentario: e.target.value }))} rows={3} />
+                  {/* Photo upload */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.6rem', letterSpacing: 1.5, opacity: 0.7, padding: '7px 12px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 4 }}>
+                      <Camera size={13} /> ADICIONAR FOTO (opcional)
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleReviewFoto} />
+                    </label>
+                    {reviewFotoPreview && (
+                      <div style={{ position: 'relative' }}>
+                        <img src={reviewFotoPreview} alt="preview" style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 4 }} />
+                        <button onClick={() => { setReviewFotoPreview(null); setReviewForm(p => ({ ...p, foto: null })); }} style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', border: 'none', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                      </div>
+                    )}
+                  </div>
                   <button className="review-submit-btn" onClick={submitReview} disabled={reviewSending || !reviewForm.nome || !reviewForm.email}>
                     <Send size={12} /> {reviewSending ? '...' : t('home.review_submit')}
                   </button>
@@ -351,6 +417,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
                         <span className="review-item-stars">{'★'.repeat(r.nota)}{'☆'.repeat(5 - r.nota)}</span>
                       </div>
                       {r.comentario && <p className="review-item-text">{r.comentario}</p>}
+                      {r.foto && <img src={r.foto} alt="foto da avaliação" style={{ maxWidth: 120, maxHeight: 120, borderRadius: 4, marginTop: 6, objectFit: 'cover' }} />}
                       <span className="review-item-date">{new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
                     </div>
                   ))}
@@ -504,6 +571,12 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
           const isFav = favorites.has(produto.id);
           const allSizesOut = [produto.estoque_p, produto.estoque_m, produto.estoque_g, produto.estoque_gg].every(e => e === 0);
 
+          // Estoque baixo: menor valor positivo entre 1 e 3
+          const stockValues = [produto.estoque_p, produto.estoque_m, produto.estoque_g, produto.estoque_gg]
+            .filter(e => e > 0);
+          const minStock = stockValues.length > 0 ? Math.min(...stockValues) : null;
+          const estoqueAvisar = minStock !== null && minStock <= 3;
+
           return (
             <div key={produto.id}
               className={`product-item ${produto.destaque ? 'item-destaque' : ''} ${allSizesOut ? 'item-esgotado' : ''}`}
@@ -513,9 +586,17 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
               <LazyImage src={`${API_URL}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
 
               {/* Badges */}
-              {promoAtiva && <span className="badge-promo"><Percent size={10} /> {t('home.promo')} {produto.promoLabel}</span>}
+              {promoAtiva && (
+                <span className="badge-promo">
+                  <Percent size={10} /> {t('home.promo')} {produto.promoLabel}
+                  {produto.promo_fim && <PromoCountdown fim={produto.promo_fim} />}
+                </span>
+              )}
               {!!produto.destaque && <span className="badge-destaque"><Pin size={10} /></span>}
               {allSizesOut && <span className="badge-esgotado">{t('home.sold_out')}</span>}
+              {!allSizesOut && estoqueAvisar && (
+                <span className="badge-estoque-baixo"><AlertTriangle size={9} /> úItimas {minStock} und.</span>
+              )}
 
               {/* Favorite heart (C1) */}
               <button className={`card-fav-btn ${isFav ? 'active' : ''}`}
