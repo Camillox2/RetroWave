@@ -77,46 +77,26 @@ function LazyImage({ src, alt, onClick }) {
 }
 
 // ═══════════════════════════════════════
-// PRODUCT CARD 3D — Mouse Tracking + Glassmorphism (Optimized)
+// PRODUCT CARD 3D — Pure CSS-variable driven (no re-renders)
 // ═══════════════════════════════════════
 function ProductCard3D({ children, onClick }) {
   const cardRef = useRef(null);
-  const [transform, setTransform] = useState({ rotateX: 0, rotateY: 0 });
-  const rafRef = useRef(null);
 
   const handleMouseMove = useCallback((e) => {
-    if (!cardRef.current) return;
-
-    // Cancelar animação anterior para evitar bugs
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-    rafRef.current = requestAnimationFrame(() => {
-      const card = cardRef.current;
-      if (!card) return;
-
-      const rect = card.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-
-      // Reduzir para 5 graus (mais suave, menos bug)
-      const rotateX = ((y - centerY) / centerY) * -5;
-      const rotateY = ((x - centerX) / centerX) * 5;
-
-      setTransform({ rotateX, rotateY });
-    });
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;  // 0..1
+    const y = (e.clientY - rect.top) / rect.height;   // 0..1
+    el.style.setProperty('--rx', `${(y - 0.5) * -12}deg`);
+    el.style.setProperty('--ry', `${(x - 0.5) * 12}deg`);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    setTransform({ rotateX: 0, rotateY: 0 });
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    const el = cardRef.current;
+    if (!el) return;
+    el.style.setProperty('--rx', '0deg');
+    el.style.setProperty('--ry', '0deg');
   }, []);
 
   return (
@@ -126,11 +106,7 @@ function ProductCard3D({ children, onClick }) {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
-      style={{
-        transform: `rotateX(${transform.rotateX}deg) rotateY(${transform.rotateY}deg)`,
-      }}
     >
-      <div className="glass-shelf" />
       {children}
     </div>
   );
@@ -186,6 +162,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+  const modalImgRef = useRef(null);
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewForm, setReviewForm] = useState({ nome: '', email: '', nota: 5, comentario: '', foto: null });
@@ -244,13 +221,28 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const estoque = produto[estoqueKey];
   const esgotado = estoque === 0;
 
-  // Zoom handlers (C6)
+  // Zoom + 3D handlers (C6)
   const handleMouseMove = (e) => {
-    if (!zoomed) return;
+    const el = modalImgRef.current;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setZoomPos({ x, y });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (zoomed) {
+      setZoomPos({ x: (x / rect.width) * 100, y: (y / rect.height) * 100 });
+    } else if (el) {
+      el.style.setProperty('--rx', `${((y / rect.height) - 0.5) * -14}deg`);
+      el.style.setProperty('--ry', `${((x / rect.width) - 0.5) * 14}deg`);
+    }
+  };
+
+  const handleMouseLeaveModal = () => {
+    setZoomed(false);
+    const el = modalImgRef.current;
+    if (el) {
+      el.style.setProperty('--rx', '0deg');
+      el.style.setProperty('--ry', '0deg');
+    }
   };
 
   // Share (C2)
@@ -336,13 +328,14 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             </button>
           )}
 
-          {/* Zoom container (C6) */}
+          {/* Zoom container + 3D effect */}
           <div
-            className={`modal-zoom-container ${zoomed ? 'zoomed' : ''}`}
+            ref={modalImgRef}
+            className={`modal-zoom-container ${zoomed ? 'zoomed' : 'modal-3d'}`}
             onClick={() => setZoomed(z => !z)}
             onMouseMove={handleMouseMove}
-            onMouseLeave={() => setZoomed(false)}
-            style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : {}}
+            onMouseLeave={handleMouseLeaveModal}
+            style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : undefined}
           >
             <AnimatePresence mode="wait">
               {allImages[currentImgIdx]?.startsWith('data:video/') ? (
