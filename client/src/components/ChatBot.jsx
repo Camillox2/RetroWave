@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useI18n } from '../i18n/index.jsx';
+import { API_URL } from '../config.js';
 import botVideoSrc from '../assets/videos/bot-logo.mp4';
-
-const API = 'http://localhost:3001';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RETRO WAVE — ASSISTENTE VIRTUAL IA (Gemini 3 Flash Preview)
@@ -202,7 +202,7 @@ FRETE E ENTREGA
 
 - Enviamos para todo o Brasil.
 - O frete é calculado com base no CEP de entrega.
-- Frete grátis para compras acima de R$ 500,00.
+- Frete grátis para compras acima de R$ 299,90.
 - Os envios são feitos via Correios (PAC e SEDEX) ou transportadoras parceiras.
 - Prazo médio de entrega: 5 a 12 dias úteis após o envio.
 
@@ -257,7 +257,7 @@ PROBLEMA: "Não consigo adicionar ao carrinho"
 SOLUÇÃO: Clique na camisa desejada para abrir os detalhes, selecione o tamanho e clique em "ADICIONAR AO CARRINHO". Se o botão não responde, tente recarregar a página.
 
 PROBLEMA: "Meu carrinho sumiu / está vazio"
-SOLUÇÃO: O carrinho é salvo no navegador (localStorage). Se você limpou os dados do navegador, o carrinho será resetado. Infelizmente isso não pode ser recuperado.
+SOLUÇÃO: Se você já fez uma compra anteriormente (usando o mesmo e-mail), seu carrinho pode ser restaurado automaticamente ao acessar o site. Caso contrário, o carrinho é salvo localmente no navegador. Se você limpou os dados, o carrinho pode ter sido resetado.
 
 PROBLEMA: "Não consigo finalizar a compra"
 SOLUÇÃO: Verifique se todos os campos obrigatórios estão preenchidos (nome, e-mail, endereço). Certifique-se de que marcou a caixa de consentimento LGPD. Se mesmo assim não funcionar, tente outro navegador ou entre em contato pelo e-mail.
@@ -315,7 +315,7 @@ P: "Posso trocar por outro modelo?"
 R: "Sim! Dentro do prazo de 7 dias após o recebimento, você pode solicitar a troca por outro modelo ou tamanho, sujeito à disponibilidade."
 
 P: "Vocês dão desconto para mais de uma camisa?"
-R: "Frete grátis para compras acima de R$ 500,00. Para outros tipos de desconto, fique de olho em nossas promoções."
+R: "Frete grátis para compras acima de R$ 299,90! Para outros tipos de desconto, fique de olho em nossas promoções."
 
 P: "Como sei se a camisa é do tamanho certo?"
 R: "Consulte nossa tabela de medidas. Se estiver entre dois tamanhos, recomendamos o maior. Na dúvida, pergunte! Estou aqui para ajudar."
@@ -330,7 +330,13 @@ P: "Vocês aceitam trocas internacionais?"
 R: "No momento, tanto vendas quanto trocas são feitas apenas dentro do Brasil."
 
 P: "Tem cupom de desconto?"
-R: "Cupons de desconto são divulgados ocasionalmente em nossas redes sociais e por e-mail. Fique de olho!"
+R: "Cupons de desconto são divulgados ocasionalmente em nossas redes sociais e por e-mail para inscritos na newsletter. Se inscreva no rodapé do site para não perder! 🔥"
+
+P: "Como me inscrevo na newsletter?"
+R: "Simples! Role até o rodapé do site e coloque seu e-mail no campo de Newsletter. Clique em 'INSCREVER' e pronto! Você receberá novidades, promoções exclusivas e lançamentos por e-mail."
+
+P: "Posso cancelar a newsletter?"
+R: "Sim! Entre em contato pelo e-mail retroswaves@gmail.com e solicitamos a remoção da sua inscrição."
 
 P: "A camisa vem com etiqueta?"
 R: "Sim, todas as camisas vêm com etiqueta e embalagem premium."
@@ -395,6 +401,20 @@ FUNCIONALIDADES DO SITE
 
 6. RESPONSIVIDADE: O site funciona perfeitamente em celulares, tablets e computadores.
 
+7. CUPONS DE DESCONTO: Na tela de checkout, há um campo para inserir cupom de desconto. Cole o código e clique em "APLICAR".
+
+8. FAVORITOS / WISHLIST: Clique no ícone de coração (♡) em qualquer camisa para salvar nos favoritos. Se você estiver logado (já fez uma compra), seus favoritos são sincronizados entre dispositivos.
+
+9. NEWSLETTER: No rodapé do site tem um campo para se inscrever na newsletter. Basta colocar seu e-mail e clicar em "INSCREVER". Você receberá novidades, promoções e lançamentos por e-mail.
+
+10. AVALIAÇÕES: Após comprar uma camisa, você pode avaliar o produto com nota de 1 a 5 estrelas e deixar um comentário. As avaliações são moderadas antes de serem publicadas.
+
+11. PWA (Instalar como App): O site pode ser instalado no celular como um aplicativo. No Chrome/Edge, clique em "Instalar" na barra de endereço. No iPhone, use "Adicionar à Tela de Início" no menu de compartilhamento do Safari.
+
+12. NOTIFICAÇÕES POR EMAIL: Você recebe e-mails automáticos quando seu pedido é confirmado e quando o status muda (preparando, enviado, entregue).
+
+13. LINKS COMPARTILHÁVEIS: Você pode copiar o link do site com um filtro de liga já aplicado (ex: /?liga=BRASILEIRÃO) e enviar para amigos. Eles verão os produtos filtrados automaticamente.
+
 ═══════════════════════════════════════════════════════════════
 CUIDADOS COM AS CAMISAS
 ═══════════════════════════════════════════════════════════════
@@ -428,7 +448,7 @@ Se o cliente perguntar sobre futebol em geral (resultados, times, etc):
 - Pode responder brevemente se for algo simples, mas sempre redirecione: "Voltando à Retro Wave, posso te ajudar com alguma coisa?"
 
 Se o cliente pedir desconto:
-- "No momento não temos cupons ativos, mas para compras acima de R$ 500 o frete é grátis! Fique de olho em nossas promoções."
+- "No momento não temos cupons ativos, mas para compras acima de R$ 299,90 o frete é grátis! Fique de olho em nossas promoções."
 
 Se o cliente perguntar sobre competidores:
 - "Não tenho como comparar com outras lojas, mas posso te garantir que a qualidade Retro Wave é top. Nossos clientes adoram! 🔥"
@@ -466,7 +486,7 @@ WAVE: "O prazo depende da sua região:
 • Centro-Oeste: 5 a 10 dias úteis
 • Nordeste: 7 a 12 dias úteis
 • Norte: 8 a 15 dias úteis
-E para compras acima de R$ 500, o frete é grátis!"
+E para compras acima de R$ 299,90, o frete é grátis!"
 
 Cliente: "minha camisa veio com defeito"
 WAVE: "Sinto muito por isso! Envie um e-mail para **retroswaves@gmail.com** com o número do pedido e fotos do defeito. Faremos a troca sem custo adicional em até 5 dias úteis após recebermos o produto de volta. Posso te ajudar com mais alguma coisa?"
@@ -581,17 +601,72 @@ function formatMessage(text) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — ChatBot
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── RESPOSTAS AUTOMÁTICAS PARA FALLBACK (quando a IA está offline) ───
+const FALLBACK_KEYS = {
+  'como comprar': 'fb_how_to_buy',
+  'prazo de entrega': 'fb_delivery',
+  'tamanhos disponíveis': 'fb_sizes',
+  'troca e devolução': 'fb_returns',
+  'formas de pagamento': 'fb_payment',
+  'cupom de desconto': 'fb_coupon',
+  'rastrear pedido': 'fb_tracking',
+  'newsletter': 'fb_newsletter',
+  'cuidados com a camisa': 'fb_care',
+  'falar com atendente': 'fb_contact',
+  'frete': 'fb_shipping',
+  'favoritos': 'fb_favorites',
+  'avaliações': 'fb_reviews',
+  'instalar app': 'fb_install',
+  'material': 'fb_material',
+  'quem é você': 'fb_who',
+};
+
+const FALLBACK_KEYWORDS = {
+  'como comprar': ['como comprar', 'como faco para comprar', 'como compro', 'quero comprar', 'como funciona a compra'],
+  'prazo de entrega': ['prazo', 'entrega', 'demora', 'chegar', 'dias uteis', 'quando chega', 'prazo de entrega'],
+  'tamanhos disponíveis': ['tamanho', 'medida', 'tamanhos', 'p m g gg', 'tam', 'numeracao'],
+  'troca e devolução': ['troca', 'devolucao', 'devolver', 'trocar', 'arrependimento', 'defeito'],
+  'formas de pagamento': ['pagamento', 'pagar', 'cartao', 'pix', 'boleto', 'parcelar', 'parcela'],
+  'cupom de desconto': ['cupom', 'desconto', 'codigo', 'promocao', 'oferta'],
+  'rastrear pedido': ['rastrear', 'pedido', 'rastreamento', 'acompanhar', 'status', 'meu pedido'],
+  'newsletter': ['newsletter', 'novidades', 'inscricao', 'email marketing'],
+  'cuidados com a camisa': ['lavar', 'cuidado', 'conservar', 'limpar', 'maquina', 'secar'],
+  'falar com atendente': ['atendente', 'humano', 'pessoa', 'contato', 'suporte', 'falar com alguem'],
+  'frete': ['frete', 'envio', 'entrega gratis', 'frete gratis', 'custo envio'],
+  'favoritos': ['favorito', 'salvar', 'curtir', 'wishlist', 'lista de desejos'],
+  'avaliações': ['avaliacao', 'avaliar', 'nota', 'estrela', 'review', 'comentario'],
+  'instalar app': ['instalar', 'app', 'aplicativo', 'pwa', 'tela inicial'],
+  'material': ['material', 'tecido', 'qualidade', 'composicao', 'poliester'],
+  'quem é você': ['quem e voce', 'seu nome', 'voce e quem', 'wave', 'quem criou'],
+};
+
+function matchFallbackKey(userText) {
+  const normalized = userText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  for (const [key, patterns] of Object.entries(FALLBACK_KEYWORDS)) {
+    if (patterns.some(p => normalized.includes(p))) return FALLBACK_KEYS[key];
+  }
+  return null;
+}
+
 function ChatBot() {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Oi! Sou a WAVE, assistente virtual da Retro Wave 👋 Como posso te ajudar?'
+      text: null // will be set by effect
     }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
+  const [aiFailed, setAiFailed] = useState(false);
+  const [showMoreQuick, setShowMoreQuick] = useState(false);
+
+  // Set initial greeting based on language
+  useEffect(() => {
+    setMessages([{ role: 'assistant', text: t('chatbot.greeting') }]);
+  }, [t]);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -668,7 +743,7 @@ function ChatBot() {
     try {
       const geminiMessages = buildGeminiMessages(trimmed);
 
-      const res = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: geminiMessages })
@@ -678,18 +753,17 @@ function ChatBot() {
 
       if (res.ok && data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+        setAiFailed(false);
       } else {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          text: 'Desculpe, tive um problema ao processar sua mensagem. Tente novamente ou entre em contato pelo e-mail retroswaves@gmail.com.'
-        }]);
+        setAiFailed(true);
+        const fbKey = matchFallbackKey(trimmed);
+        setMessages(prev => [...prev, { role: 'assistant', text: t(`chatbot.${fbKey || 'fb_fallback'}`) }]);
       }
     } catch (err) {
       console.error('Chat error:', err);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: 'Ops, parece que estou com dificuldades técnicas no momento. Tente novamente em alguns instantes.'
-      }]);
+      setAiFailed(true);
+      const fbKey = matchFallbackKey(trimmed);
+      setMessages(prev => [...prev, { role: 'assistant', text: t(`chatbot.${fbKey || 'fb_fallback'}`) }]);
     } finally {
       setIsTyping(false);
     }
@@ -716,71 +790,87 @@ function ChatBot() {
     setMessages([
       {
         role: 'assistant',
-        text: 'Conversa reiniciada! Como posso te ajudar? 👋'
+        text: t('chatbot.reset')
       }
     ]);
     setInput('');
     setIsTyping(false);
-  }, []);
+  }, [t]);
 
   // Sugestões rápidas
   const quickActions = useMemo(() => [
-    'Como comprar?',
-    'Prazo de entrega',
-    'Tamanhos disponíveis',
-    'Troca e devolução'
-  ], []);
+    t('chatbot.quick_how_to_buy'),
+    t('chatbot.quick_delivery'),
+    t('chatbot.quick_sizes'),
+    t('chatbot.quick_returns')
+  ], [t]);
+
+  const moreQuickActions = useMemo(() => [
+    t('chatbot.quick_payment'),
+    t('chatbot.quick_coupon'),
+    t('chatbot.quick_tracking'),
+    t('chatbot.quick_newsletter'),
+    t('chatbot.quick_care'),
+    t('chatbot.quick_contact'),
+  ], [t]);
 
   const handleQuickAction = useCallback((text) => {
-    setInput(text);
-    setTimeout(() => {
-      setInput('');
-      const userMsg = { role: 'user', text };
-      setMessages(prev => [...prev, userMsg]);
-      setIsTyping(true);
+    const userMsg = { role: 'user', text };
+    setMessages(prev => [...prev, userMsg]);
+    setIsTyping(true);
 
-      const geminiMessages = buildGeminiMessages(text);
+    // Se IA falhou antes, usar fallback direto
+    if (aiFailed) {
+      setTimeout(() => {
+        const fbKey = matchFallbackKey(text);
+        setMessages(prev => [...prev, { role: 'assistant', text: t(`chatbot.${fbKey || 'fb_fallback'}`) }]);
+        setIsTyping(false);
+      }, 400);
+      return;
+    }
 
-      // Adicionar a mensagem atual manualmente (porque buildGeminiMessages usa o state anterior)
-      // Na verdade o buildGeminiMessages já inclui. Precisamos refazer aqui.
-      const allMsgs = [
-        {
-          role: 'user',
-          parts: [{ text: SYSTEM_PROMPT + '\n\nAgora o cliente vai conversar com você. Responda como a WAVE.' }]
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'Entendido! Sou a WAVE, assistente da Retro Wave. Estou pronta para atender.' }]
-        }
-      ];
-
-      const recent = [...messages, userMsg].slice(-20);
-      for (const msg of recent) {
-        allMsgs.push({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.text }]
-        });
+    const allMsgs = [
+      {
+        role: 'user',
+        parts: [{ text: SYSTEM_PROMPT + '\n\nAgora o cliente vai conversar com você. Responda como a WAVE.' }]
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Entendido! Sou a WAVE, assistente da Retro Wave. Estou pronta para atender.' }]
       }
+    ];
 
-      fetch(`${API}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: allMsgs })
+    const recent = [...messages, userMsg].slice(-20);
+    for (const msg of recent) {
+      allMsgs.push({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.text }]
+      });
+    }
+
+    fetch(`${API_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: allMsgs })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.reply) {
+          setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+          setAiFailed(false);
+        } else {
+          setAiFailed(true);
+          const fbKey = matchFallbackKey(text);
+          setMessages(prev => [...prev, { role: 'assistant', text: t(`chatbot.${fbKey || 'fb_fallback'}`) }]);
+        }
       })
-        .then(res => res.json())
-        .then(data => {
-          if (data.reply) {
-            setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
-          } else {
-            setMessages(prev => [...prev, { role: 'assistant', text: 'Desculpe, tive um problema. Tente novamente.' }]);
-          }
-        })
-        .catch(() => {
-          setMessages(prev => [...prev, { role: 'assistant', text: 'Ops, erro de conexão. Tente novamente.' }]);
-        })
-        .finally(() => setIsTyping(false));
-    }, 50);
-  }, [messages, buildGeminiMessages]);
+      .catch(() => {
+        setAiFailed(true);
+        const fbKey = matchFallbackKey(text);
+        setMessages(prev => [...prev, { role: 'assistant', text: t(`chatbot.${fbKey || 'fb_fallback'}`) }]);
+      })
+      .finally(() => setIsTyping(false));
+  }, [messages, aiFailed]);
 
   return (
     <>
@@ -790,8 +880,8 @@ function ChatBot() {
         onClick={toggleChat}
         onMouseEnter={handleFabEnter}
         onMouseLeave={handleFabLeave}
-        aria-label={isOpen ? 'Fechar chat' : 'Abrir assistente virtual'}
-        title="Assistente WAVE"
+        aria-label={isOpen ? t('chatbot.close_chat') : t('chatbot.open_chat')}
+        title={t('chatbot.assistant_title')}
       >
         <span className="chatbot-fab-shimmer" />
         {isOpen ? (
@@ -818,12 +908,12 @@ function ChatBot() {
                 <span className="chatbot-name">WAVE</span>
                 <span className="chatbot-status">
                   <span className="chatbot-status-dot" />
-                  Online
+                  {t('chatbot.online')}
                 </span>
               </div>
             </div>
             <div className="chatbot-header-actions">
-              <button className="chatbot-clear" onClick={clearChat} title="Limpar conversa" aria-label="Limpar conversa">
+              <button className="chatbot-clear" onClick={clearChat} title={t('chatbot.clear_chat')} aria-label={t('chatbot.clear_chat')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
@@ -870,8 +960,8 @@ function ChatBot() {
 
             <div ref={messagesEndRef} />
 
-            {/* Quick actions — Só mostra se houver apenas a mensagem de boas-vindas */}
-            {messages.length === 1 && !isTyping && (
+            {/* Quick actions — mostra sempre que não estiver digitando */}
+            {!isTyping && (
               <div className="chat-quick-actions">
                 {quickActions.map((text) => (
                   <button
@@ -882,6 +972,21 @@ function ChatBot() {
                     {text}
                   </button>
                 ))}
+                {showMoreQuick && moreQuickActions.map((text) => (
+                  <button
+                    key={text}
+                    className="chat-quick-btn"
+                    onClick={() => handleQuickAction(text)}
+                  >
+                    {text}
+                  </button>
+                ))}
+                <button
+                  className="chat-quick-btn chat-quick-more"
+                  onClick={() => setShowMoreQuick(v => !v)}
+                >
+                  {showMoreQuick ? `▲ ${t('chatbot.less_questions')}` : `▼ ${t('chatbot.more_questions')}`}
+                </button>
               </div>
             )}
           </div>
@@ -893,7 +998,7 @@ function ChatBot() {
                 ref={inputRef}
                 type="text"
                 className="chatbot-input"
-                placeholder="Digite sua mensagem..."
+                placeholder={t('chatbot.input_placeholder')}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -904,12 +1009,12 @@ function ChatBot() {
                 className="chatbot-send"
                 onClick={sendMessage}
                 disabled={!input.trim() || isTyping}
-                aria-label="Enviar mensagem"
+                aria-label={t('chatbot.send_message')}
               >
                 <SendIcon size={16} />
               </button>
             </div>
-            <p className="chatbot-powered">Assistente WAVE • Retro Wave</p>
+            <p className="chatbot-powered">{t('chatbot.powered')}</p>
           </div>
         </div>
       )}

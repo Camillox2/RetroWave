@@ -1,4 +1,4 @@
-const CACHE_NAME = 'retrowave-v1';
+const CACHE_NAME = 'retrowave-v4';
 const PRECACHE_URLS = [
   '/',
   '/favicon.svg'
@@ -23,9 +23,33 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Skip non-GET and API requests
-  if (request.method !== 'GET' || request.url.includes('/api/')) return;
+  // Não interceptar requests que não sejam GET (POST, PUT, DELETE etc.)
+  if (request.method !== 'GET') return;
 
+  const url = request.url;
+
+  // L-1: Nunca cachear respostas JSON da API (dados podem mudar a qualquer momento)
+  // Permitir apenas imagens binárias da API
+  if (url.includes('/api/')) {
+    if (url.includes('/thumb') || url.includes('/bin') || url.includes('/banner-image')) {
+      // Cache imagens da API — essas mudam raramente
+      event.respondWith(
+        fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            }
+            return response;
+          })
+          .catch(() => caches.match(request))
+      );
+    }
+    // Todos os outros endpoints /api/ passam direto sem cache
+    return;
+  }
+
+  // Assets estáticos — network first, fallback cache
   event.respondWith(
     fetch(request)
       .then((response) => {

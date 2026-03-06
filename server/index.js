@@ -5,6 +5,8 @@ const mysql = require('mysql2');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ═══════════════════════════════════════════════════════
@@ -42,7 +44,22 @@ setInterval(() => {
 }, 60 * 60 * 1000);
 
 const app = express();
-app.use(cors());
+
+// Segurança: headers HTTP
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// CORS restrito ao frontend
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',').map(o => o.trim());
+app.use(cors({
+    origin: (origin, cb) => {
+        // Permitir sem origin (Postman/mobile) e origins autorizadas
+        if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
+        cb(new Error('CORS bloqueado'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'x-admin-token', 'ngrok-skip-browser-warning']
+}));
+
 app.use(express.json({ limit: '50mb' }));
 
 // ═══════════════════════════════════════════════════════
@@ -58,14 +75,17 @@ const emailTransporter = nodemailer.createTransport({
   }
 });
 
+// Verificar conexão SMTP na inicialização
+emailTransporter.verify()
+  .then(() => console.log('✅ Email SMTP conectado com sucesso'))
+  .catch(err => console.error('❌ Erro na conexão SMTP:', err.message, '\n   → Para Gmail, use uma Senha de App: https://myaccount.google.com/apppasswords'));
+
 async function sendEmail(to, subject, html) {
   const from = process.env.EMAIL_USER;
-  if (!from) return; // Email not configured — skip silently
-  try {
-    await emailTransporter.sendMail({ from: `"Retro Wave" <${from}>`, to, subject, html });
-  } catch (err) {
-    console.error('Email error:', err.message);
-  }
+  if (!from) throw new Error('EMAIL_USER not configured');
+  const info = await emailTransporter.sendMail({ from: `"Retro Wave" <${from}>`, to, subject, html });
+  console.log(`📧 Email enviado para ${to} — MessageId: ${info.messageId}`);
+  return info;
 }
 
 function buildOrderEmailHtml(pedidoId, nome, itens, total, status) {
@@ -185,7 +205,19 @@ db.query(`CREATE TABLE IF NOT EXISTS carrinhos_abandonados (
     carrinho JSON NOT NULL,
     recuperado TINYINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_email (email)
+)`);
+// H-3: garantir unique key mesmo em tabelas já existentes
+db.query(`ALTER TABLE carrinhos_abandonados ADD UNIQUE KEY IF NOT EXISTS uq_email (email)`, () => {});
+
+// Newsletter subscribers
+db.query(`CREATE TABLE IF NOT EXISTS newsletter (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    nome VARCHAR(255) DEFAULT '',
+    ativo TINYINT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`);
 
 app.use((req, res, next) => {
@@ -354,75 +386,196 @@ app.post('/api/clique/:id', (req, res) => {
 
 // Checkout (Login Invisível)
 app.post('/api/checkout', (req, res) => {
-    const { email, nome, endereco, carrinho, total, cupomCodigo } = req.body;
+    const { email, nome, endereco, carrinho, cupomCodigo } = req.body;
 
     if (!email || !nome || !endereco || !carrinho || carrinho.length === 0) {
         return res.status(400).json({ error: 'Dados incompletos' });
     }
 
-    const totalNum = parseFloat(total);
-    if (!Number.isFinite(totalNum) || totalNum <= 0) {
-        return res.status(400).json({ error: 'Total inválido' });
+    // Validar itens do carrinho
+    const itemIds = carrinho.map(i => parseInt(i.id)).filter(id => Number.isInteger(id) && id > 0);
+    if (itemIds.length !== carrinho.length) {
+        return res.status(400).json({ error: 'Carrinho inválido' });
     }
 
-    // Se cupom foi usado, incrementar uso
-    if (cupomCodigo) {
-        db.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [cupomCodigo]);
-    }
-
-    // Decrementar estoque por tamanho
-    carrinho.forEach(item => {
-        const tamCol = `estoque_${(item.tamanho || 'M').toLowerCase()}`;
-        if (['estoque_p', 'estoque_m', 'estoque_g', 'estoque_gg'].includes(tamCol)) {
-            db.query(`UPDATE produtos SET ${tamCol} = ${tamCol} - ? WHERE id = ? AND ${tamCol} > 0`, [item.qtd || 1, item.id]);
-        }
-    });
-
-    db.query('SELECT id FROM usuarios WHERE email = ?', [email], (err, users) => {
+    // Buscar preços reais no banco (C-1: nunca confiar no total do cliente)
+    db.query('SELECT id, nome, preco, promo_desconto, promo_tipo, promo_inicio, promo_fim FROM produtos WHERE id IN (?)', [itemIds], (err, produtos) => {
         if (err) return res.status(500).json({ error: 'Erro no servidor' });
+        if (produtos.length !== [...new Set(itemIds)].length) {
+            return res.status(400).json({ error: 'Produto não encontrado' });
+        }
 
-        if (users.length > 0) {
-            realizarPedido(users[0].id);
+        const precoMap = {};
+        produtos.forEach(p => { precoMap[p.id] = p; });
+
+        const hoje = new Date().toISOString().split('T')[0];
+        let totalReal = 0;
+
+        for (const item of carrinho) {
+            const p = precoMap[item.id];
+            if (!p) return res.status(400).json({ error: 'Produto inválido' });
+            let preco = parseFloat(p.preco);
+            const promoAtiva = p.promo_desconto && p.promo_inicio && p.promo_fim
+                && p.promo_inicio <= hoje && p.promo_fim >= hoje;
+            if (promoAtiva) {
+                preco = p.promo_tipo === 'porcentagem'
+                    ? preco * (1 - p.promo_desconto / 100)
+                    : preco - p.promo_desconto;
+            }
+            totalReal += preco * (item.qtd || 1);
+        }
+
+        // Frete
+        const FRETE = 29.90;
+        const FRETE_GRATIS = 299.90;
+        if (totalReal < FRETE_GRATIS) totalReal += FRETE;
+
+        // Aplicar cupom (se informado, validar no banco)
+        const aplicarCupomEProsseguir = (descontoCupom) => {
+            const totalFinal = Math.max(0, totalReal - (descontoCupom || 0));
+            processarCheckout(totalFinal);
+        };
+
+        if (cupomCodigo) {
+            db.query('SELECT * FROM cupons WHERE codigo = ? AND ativo = 1', [cupomCodigo.toUpperCase().trim()], (err, cupons) => {
+                let desconto = 0;
+                if (!err && cupons.length > 0) {
+                    const c = cupons[0];
+                    const valido = (!c.validade || c.validade >= hoje)
+                        && (c.usos_max <= 0 || c.usos_atuais < c.usos_max);
+                    if (valido) {
+                        desconto = c.tipo === 'porcentagem'
+                            ? totalReal * (c.valor / 100)
+                            : parseFloat(c.valor);
+                        db.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [c.codigo]);
+                    }
+                }
+                aplicarCupomEProsseguir(desconto);
+            });
         } else {
-            db.query('INSERT INTO usuarios (email, nome, endereco) VALUES (?, ?, ?)',
-                [email, nome, endereco], (err, result) => {
-                    if (err) return res.status(500).json({ error: 'Erro ao criar usuario' });
-                    realizarPedido(result.insertId);
+            aplicarCupomEProsseguir(0);
+        }
+
+        function processarCheckout(totalFinal) {
+            // C-4: usar transaction para evitar sobrevenda
+            db.getConnection((err, conn) => {
+                if (err) return res.status(500).json({ error: 'Erro de conexão' });
+
+                conn.beginTransaction(err => {
+                    if (err) { conn.release(); return res.status(500).json({ error: 'Erro ao iniciar transação' }); }
+
+                    // Verificar e decrementar estoque com lock
+                    let estoqueOk = true;
+                    let pendentes = carrinho.length;
+
+                    const onEstoqueVerificado = (estoqueErro) => {
+                        if (estoqueErro) {
+                            return conn.rollback(() => { conn.release(); res.status(400).json({ error: estoqueErro }); });
+                        }
+                        pendentes--;
+                        if (pendentes > 0) return;
+
+                        // Upsert usuário
+                        conn.query('SELECT id FROM usuarios WHERE email = ?', [email], (err, users) => {
+                            if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro no servidor' }); });
+
+                            const prosseguir = (userId) => {
+                                conn.query('INSERT INTO pedidos (usuario_id, total) VALUES (?, ?)', [userId, totalFinal.toFixed(2)], (err, result) => {
+                                    if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao criar pedido' }); });
+                                    const pedidoId = result.insertId;
+
+                                    const itemValues = carrinho.map(item => [
+                                        pedidoId, item.id, item.qtd || 1, item.tamanho || 'M',
+                                        (() => {
+                                            const p = precoMap[item.id];
+                                            let pr = parseFloat(p.preco);
+                                            const pA = p.promo_desconto && p.promo_inicio && p.promo_fim && p.promo_inicio <= hoje && p.promo_fim >= hoje;
+                                            if (pA) pr = p.promo_tipo === 'porcentagem' ? pr * (1 - p.promo_desconto / 100) : pr - p.promo_desconto;
+                                            return pr.toFixed(2);
+                                        })()
+                                    ]);
+
+                                    conn.query('INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, tamanho, preco_unitario) VALUES ?', [itemValues], (err) => {
+                                        if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao inserir itens' }); });
+
+                                        // Incrementar vendas
+                                        const vendaPromises = carrinho.map(item => new Promise(resolve => {
+                                            conn.query('UPDATE produtos SET vendas = vendas + ? WHERE id = ?', [item.qtd || 1, item.id], resolve);
+                                        }));
+
+                                        Promise.all(vendaPromises).then(() => {
+                                            conn.commit(err => {
+                                                if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao confirmar pedido' }); });
+                                                conn.release();
+
+                                                // Limpar carrinho abandonado
+                                                db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
+
+                                                // Email de confirmação (H-4: nomes vêm do banco, não do cliente)
+                                                const itensEmail = carrinho.map(item => ({
+                                                    nome: precoMap[item.id].nome,
+                                                    tamanho: item.tamanho || 'M',
+                                                    quantidade: item.qtd || 1,
+                                                    preco_unitario: (() => {
+                                                        const p = precoMap[item.id];
+                                                        let pr = parseFloat(p.preco);
+                                                        const pA = p.promo_desconto && p.promo_inicio && p.promo_fim && p.promo_inicio <= hoje && p.promo_fim >= hoje;
+                                                        if (pA) pr = p.promo_tipo === 'porcentagem' ? pr * (1 - p.promo_desconto / 100) : pr - p.promo_desconto;
+                                                        return pr.toFixed(2);
+                                                    })()
+                                                }));
+
+                                                sendEmail(email, `Pedido #${pedidoId} — Retro Wave`,
+                                                    buildOrderEmailHtml(pedidoId, nome, itensEmail, totalFinal, 'concluido'))
+                                                    .catch(e => console.error('Email confirmação erro:', e.message));
+
+                                                db.query('SELECT id, email, nome, endereco FROM usuarios WHERE id = ?', [userId], (err, rows) => {
+                                                    const cliente = rows && rows[0] ? rows[0] : { id: userId, email, nome, endereco };
+                                                    res.json({ success: true, pedidoId, cliente, total: totalFinal.toFixed(2) });
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
+                            };
+
+                            if (users.length > 0) {
+                                prosseguir(users[0].id);
+                            } else {
+                                conn.query('INSERT INTO usuarios (email, nome, endereco) VALUES (?, ?, ?)', [email, nome, endereco], (err, result) => {
+                                    if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao criar usuário' }); });
+                                    prosseguir(result.insertId);
+                                });
+                            }
+                        });
+                    };
+
+                    // Decrementar estoque com verificação (FOR UPDATE seria ideal mas callback hell — usamos série)
+                    let i = 0;
+                    const processarItem = () => {
+                        if (i >= carrinho.length) return onEstoqueVerificado(null);
+                        const item = carrinho[i++];
+                        const tamCol = `estoque_${(item.tamanho || 'M').toLowerCase()}`;
+                        if (!['estoque_p', 'estoque_m', 'estoque_g', 'estoque_gg'].includes(tamCol)) {
+                            return onEstoqueVerificado('Tamanho inválido');
+                        }
+                        conn.query(
+                            `UPDATE produtos SET ${tamCol} = ${tamCol} - ? WHERE id = ? AND (${tamCol} >= ? OR ${tamCol} = -1)`,
+                            [item.qtd || 1, item.id, item.qtd || 1],
+                            (err, result) => {
+                                if (err) return onEstoqueVerificado('Erro ao verificar estoque');
+                                if (result.affectedRows === 0) {
+                                    return onEstoqueVerificado(`Estoque insuficiente para o tamanho ${(item.tamanho || 'M').toUpperCase()}`);
+                                }
+                                processarItem();
+                            }
+                        );
+                    };
+                    processarItem();
                 });
+            });
         }
     });
-
-    function realizarPedido(userId) {
-        db.query('INSERT INTO pedidos (usuario_id, total) VALUES (?, ?)', [userId, total], (err, result) => {
-            if (err) return res.status(500).json({ error: 'Erro ao criar pedido' });
-            const pedidoId = result.insertId;
-
-            const itemValues = carrinho.map(item => [pedidoId, item.id, item.qtd || 1, item.tamanho || 'M', item.preco]);
-            db.query('INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, tamanho, preco_unitario) VALUES ?',
-                [itemValues], (err) => {
-                    if (err) console.error('Erro ao inserir itens:', err);
-                });
-
-            carrinho.forEach(item => {
-                db.query('UPDATE produtos SET vendas = vendas + ? WHERE id = ?', [item.qtd || 1, item.id]);
-            });
-
-            // Retornar dados do cliente para login persistente + limpar carrinho abandonado
-            db.query('SELECT id, email, nome, endereco FROM usuarios WHERE id = ?', [userId], (err, userRows) => {
-                const cliente = userRows && userRows[0] ? userRows[0] : { id: userId, email, nome, endereco };
-                // Limpar carrinho abandonado ao finalizar pedido
-                db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
-                // Enviar email de confirmação
-                const itensEmail = carrinho.map(i => ({
-                    nome: i.nome || `Produto #${i.id}`, tamanho: i.tamanho || 'M',
-                    quantidade: i.qtd || 1, preco_unitario: i.precoFinal || i.preco
-                }));
-                sendEmail(email, `Pedido #${pedidoId} — Retro Wave`,
-                    buildOrderEmailHtml(pedidoId, nome, itensEmail, totalNum, 'concluido'));
-                res.json({ success: true, pedidoId, cliente });
-            });
-        });
-    }
 });
 
 // ═══════════════════════════════════════════════════════
@@ -629,8 +782,17 @@ app.post('/api/validar-cupom', (req, res) => {
 // ROTAS DO ADMIN
 // ═══════════════════════════════════════════════════════
 
+// Rate limit no login
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 min
+    max: 10,
+    message: { error: 'Muitas tentativas de login. Aguarde 15 minutos.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 // Login Admin (com bcrypt)
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', loginLimiter, (req, res) => {
     const { usuario, senha } = req.body;
     if (!usuario || !senha) return res.status(400).json({ error: 'Dados incompletos' });
 
@@ -776,8 +938,16 @@ app.post('/api/admin/produtos', (req, res) => {
     const { nome, liga, preco, imagem, descricao, imagensExtras, estoque_p, estoque_m, estoque_g, estoque_gg } = req.body;
     if (!nome || !liga || !preco) return res.status(400).json({ error: 'Nome, liga e preço são obrigatórios' });
 
-    db.query('INSERT INTO produtos (nome, liga, preco, imagem, descricao, estoque_p, estoque_m, estoque_g, estoque_gg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [nome, liga, preco, imagem || '', descricao || null, estoque_p ?? -1, estoque_m ?? -1, estoque_g ?? -1, estoque_gg ?? -1], (err, result) => {
+    // H-1: incluir campos destaque e promo no INSERT
+    const destaque = req.body.destaque ? 1 : 0;
+    const promo_desconto = req.body.promo_desconto || null;
+    const promo_tipo = req.body.promo_tipo || 'porcentagem';
+    const promo_inicio = req.body.promo_inicio || null;
+    const promo_fim = req.body.promo_fim || null;
+
+    db.query(
+        'INSERT INTO produtos (nome, liga, preco, imagem, descricao, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p, estoque_m, estoque_g, estoque_gg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [nome, liga, preco, imagem || '', descricao || null, destaque, promo_desconto, promo_tipo, promo_inicio, promo_fim, estoque_p ?? -1, estoque_m ?? -1, estoque_g ?? -1, estoque_gg ?? -1], (err, result) => {
             if (err) return res.status(500).json({ error: 'Erro ao cadastrar' });
             const produtoId = result.insertId;
 
@@ -960,7 +1130,8 @@ app.put('/api/admin/pedidos/:id/status', (req, res) => {
                 if (!err2 && rows.length > 0) {
                     const { email, nome, total } = rows[0];
                     sendEmail(email, `Atualização do Pedido #${id} — Retro Wave`,
-                        buildOrderEmailHtml(id, nome, [], total, status));
+                        buildOrderEmailHtml(id, nome, [], total, status))
+                        .catch(err => console.error('Email status erro:', err.message));
                 }
             }
         );
@@ -1213,6 +1384,114 @@ app.post('/api/chat', async (req, res) => {
     } catch (err) {
         console.error('Chat proxy error:', err.message);
         res.status(500).json({ error: 'Erro interno ao processar chat' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════
+// NEWSLETTER
+// ═══════════════════════════════════════════════════════
+
+// Inscrição pública
+app.post('/api/newsletter', (req, res) => {
+    const { email, nome } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email inválido' });
+    db.query(
+        'INSERT INTO newsletter (email, nome) VALUES (?, ?) ON DUPLICATE KEY UPDATE ativo = 1, nome = VALUES(nome)',
+        [email.trim().toLowerCase(), (nome || '').trim()],
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Erro ao cadastrar' });
+            res.json({ success: true });
+        }
+    );
+});
+
+// Admin: listar inscritos
+app.get('/api/admin/newsletter', (req, res) => {
+    db.query('SELECT * FROM newsletter ORDER BY created_at DESC', (err, rows) => {
+        if (err) return res.status(500).json([]);
+        res.json(rows);
+    });
+});
+
+// Admin: deletar inscrito
+app.delete('/api/admin/newsletter/:id', (req, res) => {
+    db.query('DELETE FROM newsletter WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: 'Erro' });
+        res.json({ success: true });
+    });
+});
+
+// Admin: enviar email em massa
+app.post('/api/admin/newsletter/enviar', async (req, res) => {
+    const { assunto, conteudo } = req.body;
+    if (!assunto || !conteudo) return res.status(400).json({ error: 'Assunto e conteúdo são obrigatórios' });
+
+    db.query('SELECT email FROM newsletter WHERE ativo = 1', async (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Erro ao buscar inscritos' });
+        if (rows.length === 0) return res.status(400).json({ error: 'Nenhum inscrito ativo' });
+
+        const html = `
+            <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;color:#111">
+                <div style="background:#111;color:#fff;padding:32px 24px;text-align:center">
+                    <h1 style="margin:0;font-size:22px;letter-spacing:4px">RETRO WAVE</h1>
+                </div>
+                <div style="padding:32px 24px;line-height:1.7;font-size:14px">
+                    ${conteudo.replace(/\n/g, '<br/>')}
+                </div>
+                <div style="background:#f9f9f9;padding:20px 24px;text-align:center;font-size:12px;color:#888">
+                    © 2026 DC Foundry Digital — By Vitor Camillo<br/>
+                    <small>Você recebeu este email por estar inscrito na newsletter da Retro Wave.</small>
+                </div>
+            </div>
+        `;
+
+        let enviados = 0;
+        let erros = 0;
+        let lastError = '';
+
+        // M-3: enviar em batches paralelos para não bloquear o event loop
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+                batch.map(row => sendEmail(row.email, assunto, html)
+                    .then(() => console.log(`Newsletter enviada para: ${row.email}`))
+                )
+            );
+            results.forEach((r, idx) => {
+                if (r.status === 'fulfilled') { enviados++; }
+                else { erros++; lastError = r.reason?.message || 'Erro desconhecido'; console.error(`Erro ao enviar para ${batch[idx].email}:`, lastError); }
+            });
+        }
+        res.json({ success: enviados > 0, enviados, erros, total: rows.length, lastError: erros > 0 ? lastError : undefined });
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// TESTE DE EMAIL (Admin)
+// ═══════════════════════════════════════════════════════
+app.post('/api/admin/email/test', requireAdmin, async (req, res) => {
+    const { destinatario } = req.body;
+    if (!destinatario || !destinatario.includes('@')) return res.status(400).json({ error: 'Email de destino inválido' });
+    try {
+        await sendEmail(destinatario, 'Teste — Retro Wave', `
+            <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;color:#111">
+                <div style="background:#111;color:#fff;padding:32px 24px;text-align:center">
+                    <h1 style="margin:0;font-size:22px;letter-spacing:4px">RETRO WAVE</h1>
+                </div>
+                <div style="padding:32px 24px;text-align:center">
+                    <h2 style="font-size:16px;letter-spacing:2px">✅ Email configurado com sucesso!</h2>
+                    <p style="color:#555">Se você está lendo isso, o envio de emails está funcionando corretamente.</p>
+                </div>
+                <div style="background:#f9f9f9;padding:20px 24px;text-align:center;font-size:12px;color:#888">
+                    © 2026 DC Foundry Digital — By Vitor Camillo
+                </div>
+            </div>
+        `);
+        res.json({ success: true, message: `Email de teste enviado para ${destinatario}` });
+    } catch (err) {
+        console.error('Erro ao enviar email de teste:', err.message);
+        res.status(500).json({ error: `Falha ao enviar: ${err.message}` });
     }
 });
 

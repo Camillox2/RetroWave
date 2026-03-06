@@ -142,9 +142,9 @@ button {
   display: none;
 }
 
-/* Admin header tabs — tighter gap for 8 tabs */
+/* Admin header tabs — tighter gap for 9 tabs */
 .admin-header-tabs {
-  gap: 14px;
+  gap: 18px;
 }
 
 .filter-btn {
@@ -279,8 +279,6 @@ button {
   content-visibility: auto;
   contain-intrinsic-size: auto 300px;
   transform: translateZ(0);
-  animation: productEnter 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  animation-delay: calc(var(--i, 0) * 0.035s);
 }
 
 /* Quando o grid está saindo: cards deslizam pra baixo e somem */
@@ -1816,6 +1814,84 @@ button {
   opacity: 1;
 }
 
+/* ═══════════════════════════════════════
+   LANGUAGE SWITCHER — Glassmorphism
+   ═══════════════════════════════════════ */
+.lang-switcher-wrap {
+  position: relative;
+}
+
+.lang-toggle {
+  gap: 4px;
+}
+
+.lang-current {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.lang-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 120px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (prefers-color-scheme: light) {
+  .lang-dropdown {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+}
+
+.lang-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  transition: background 0.15s ease;
+}
+
+.lang-option:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  .lang-option:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.lang-active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lang-flag {
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .search-bar {
   position: sticky;
   top: var(--header-height);
@@ -2087,6 +2163,75 @@ button {
   text-transform: uppercase;
   max-width: 500px;
   line-height: 1.6;
+}
+
+/* Newsletter form in footer */
+.footer-newsletter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.footer-nl-label {
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-nl-row {
+  display: flex;
+  gap: 0;
+  max-width: 380px;
+  width: 100%;
+}
+
+.footer-nl-input {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  background: var(--accent-color);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  color: var(--text-color);
+  font-family: var(--font-family);
+  outline: none;
+}
+
+.footer-nl-input::placeholder {
+  color: var(--text-color);
+  opacity: 0.3;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.footer-nl-btn {
+  padding: 10px 18px;
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  font-weight: 600;
+  background: var(--text-color);
+  color: var(--bg-color);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: opacity 0.2s;
+}
+
+.footer-nl-btn:hover {
+  opacity: 0.8;
+}
+
+.footer-nl-status {
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  opacity: 0.6;
 }
 
 
@@ -2793,6 +2938,17 @@ button {
   border-color: var(--text-color);
 }
 
+.chat-quick-more {
+  width: 100%;
+  text-align: center;
+  border-style: dashed;
+  opacity: 0.6;
+  font-size: 0.55rem;
+}
+.chat-quick-more:hover {
+  opacity: 1;
+}
+
 /* ── FOOTER DO CHAT — Input ── */
 .chatbot-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -2891,6 +3047,68 @@ button {
   z-index: 10000;
   pointer-events: none;
 }
+
+/* ── Confirm Modal ── */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 11000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.confirm-modal-box {
+  background: #1a1a1a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 32px 36px 24px;
+  min-width: 320px;
+  max-width: 420px;
+  text-align: center;
+}
+
+.confirm-modal-msg {
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 28px;
+  line-height: 1.5;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.confirm-modal-cancel,
+.confirm-modal-ok {
+  padding: 10px 28px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.confirm-modal-cancel {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+}
+.confirm-modal-cancel:hover { background: rgba(255,255,255,0.15); }
+
+.confirm-modal-ok {
+  background: #fff;
+  color: #000;
+}
+.confirm-modal-ok:hover { background: #e0e0e0; }
 
 /* ═══════════════════════════════ PRODUCT EDITOR OVERLAY ═══════════════════════════════ */
 .editor-overlay {
@@ -4391,29 +4609,6 @@ button {
 .modal-zoom-container.zoomed img {
   transform: scale(2.2);
 }
-
-/* ── WhatsApp Button (C7) ── */
-.modal-whatsapp-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 20px;
-  background: #25d366;
-  color: #fff;
-  border: none;
-  font-size: 0.55rem;
-  font-weight: 600;
-  letter-spacing: 2.5px;
-  cursor: pointer;
-  margin-top: 8px;
-  text-decoration: none;
-  font-family: inherit;
-  transition: background 0.2s;
-}
-
-.modal-whatsapp-btn:hover { background: #1eba56; }
 
 /* ── Reviews Section (C8) ── */
 .modal-reviews-section {

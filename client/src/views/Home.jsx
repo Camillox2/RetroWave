@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../i18n/index.jsx';
+import { API_URL } from '../config.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingBag, ChevronLeft, ChevronRight, Pin, Percent, Heart, Share2, MessageCircle, Star, Send, ExternalLink, Copy } from 'lucide-react';
-
-const API = 'http://localhost:3001';
+import { X, ShoppingBag, ChevronLeft, ChevronRight, Pin, Percent, Heart, Share2, Star, Send, Copy } from 'lucide-react';
 const CACHE_KEY = 'retrowave_produtos_v3';
 const CACHE_TS_KEY = 'retrowave_produtos_v3_ts';
 const CACHE_TTL = 10 * 60 * 1000;
@@ -60,14 +60,14 @@ function SkeletonGrid() {
 // ═══════════════════════════════════════
 // HERO BANNER
 // ═══════════════════════════════════════
-function HeroBanner({ config }) {
+function HeroBanner({ config, t }) {
   const navigate = useNavigate();
   if (!config || config.banner_ativo !== '1') return null;
   const hasBgImage = !!config.banner_imagem;
 
   return (
     <div className="hero-banner">
-      {hasBgImage && <img src={`${API}/api/banner-image`} alt="Banner" className="hero-banner-bg" loading="eager" />}
+      {hasBgImage && <img src={`${API_URL}/api/banner-image`} alt="Banner" className="hero-banner-bg" loading="eager" />}
       <div className="hero-banner-overlay">
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}>
           {config.banner_titulo || 'RETRO WAVE'}
@@ -80,7 +80,7 @@ function HeroBanner({ config }) {
         {config.banner_link && (
           <motion.button className="hero-banner-cta" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
             onClick={() => navigate(config.banner_link)}>
-            VER COLEÇÃO →
+            {t('home.hero_cta')}
           </motion.button>
         )}
       </div>
@@ -93,7 +93,7 @@ function HeroBanner({ config }) {
 // ═══════════════════════════════════════
 const SIZES = ['P', 'M', 'G', 'GG'];
 
-function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite, siteConfig }) {
+function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite, siteConfig, t }) {
   const [selectedSize, setSelectedSize] = useState('M');
   const [extraImages, setExtraImages] = useState([]);
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
@@ -114,20 +114,20 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
     setShareMsg('');
 
     if (produto.imgCount > 0) {
-      fetch(`${API}/api/produtos/${produto.id}/imagens`)
+      fetch(`${API_URL}/api/produtos/${produto.id}/imagens`)
         .then(r => r.json())
-        .then(imgs => setExtraImages(imgs.map(i => `${API}/api/imagens/${i.id}/bin`)))
+        .then(imgs => setExtraImages(imgs.map(i => `${API_URL}/api/imagens/${i.id}/bin`)))
         .catch(() => {});
     }
 
     // Load reviews
-    fetch(`${API}/api/produtos/${produto.id}/avaliacoes`)
+    fetch(`${API_URL}/api/produtos/${produto.id}/avaliacoes`)
       .then(r => r.json())
       .then(setReviews)
       .catch(() => {});
   }, [produto?.id]);
 
-  const mainThumbUrl = produto ? `${API}/api/produtos/${produto.id}/thumb` : '';
+  const mainThumbUrl = produto ? `${API_URL}/api/produtos/${produto.id}/thumb` : '';
   const allImages = useMemo(() => {
     if (!produto) return [];
     return [mainThumbUrl, ...extraImages];
@@ -168,26 +168,20 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const shareUrl = `${window.location.origin}/?produto=${produto.id}`;
   const shareText = `${produto.nome} — R$ ${precoFinal.toFixed(2)} | Retro Wave`;
 
-  const handleShareWhatsApp = () => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
-  };
-
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
-    setShareMsg('Link copiado!');
+    setShareMsg(t('home.link_copied'));
     setTimeout(() => setShareMsg(''), 2000);
   };
 
-  // WhatsApp buy (C7)
-  const whatsappNumber = siteConfig?.whatsapp || '5511999999999';
-  const whatsappMsg = `Olá! Tenho interesse na camisa *${produto.nome}* (${produto.liga}) — Tamanho ${selectedSize} — R$ ${precoFinal.toFixed(2)}`;
+  // WhatsApp buy removed
 
   // Review submit (C8)
   const submitReview = async () => {
     if (!reviewForm.nome || !reviewForm.email || !reviewForm.nota) return;
     setReviewSending(true);
     try {
-      await fetch(`${API}/api/avaliacoes`, {
+      await fetch(`${API_URL}/api/avaliacoes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...reviewForm, produto_id: produto.id })
@@ -195,7 +189,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
       setShowReviewForm(false);
       setReviewForm({ nome: '', email: '', nota: 5, comentario: '' });
       // Reload reviews
-      const res = await fetch(`${API}/api/produtos/${produto.id}/avaliacoes`);
+      const res = await fetch(`${API_URL}/api/produtos/${produto.id}/avaliacoes`);
       setReviews(await res.json());
     } catch {} finally { setReviewSending(false); }
   };
@@ -215,8 +209,8 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 
         {/* Image side */}
         <div className="modal-image-section">
-          {promoAtiva && <div className="modal-promo-badge">PROMO {produto.promoLabel}</div>}
-          {!!produto.destaque && <div className="modal-destaque-badge"><Pin size={12} /> DESTAQUE</div>}
+          {promoAtiva && <div className="modal-promo-badge">{t('home.promo')} {produto.promoLabel}</div>}
+          {!!produto.destaque && <div className="modal-destaque-badge"><Pin size={12} /> {t('home.highlight')}</div>}
 
           {/* Favorite button (C1) */}
           <button className={`modal-fav-btn ${isFav ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFavorite(produto.id); }}>
@@ -286,15 +280,15 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             <div className="modal-divider" />
 
             <div className="modal-info-grid">
-              <div className="modal-info-item"><span className="modal-info-label">CONDIÇÃO</span><span className="modal-info-value">RETRO — NOVA</span></div>
-              <div className="modal-info-item"><span className="modal-info-label">TIPO</span><span className="modal-info-value">CAMISA DE TIME</span></div>
-              <div className="modal-info-item"><span className="modal-info-label">LIGA</span><span className="modal-info-value">{produto.liga}</span></div>
-              <div className="modal-info-item"><span className="modal-info-label">MATERIAL</span><span className="modal-info-value">POLIÉSTER 100%</span></div>
+              <div className="modal-info-item"><span className="modal-info-label">{t('home.condition').toUpperCase()}</span><span className="modal-info-value">{t('home.condition_value').toUpperCase()}</span></div>
+              <div className="modal-info-item"><span className="modal-info-label">{t('home.type').toUpperCase()}</span><span className="modal-info-value">{t('home.type_value').toUpperCase()}</span></div>
+              <div className="modal-info-item"><span className="modal-info-label">{t('home.liga').toUpperCase()}</span><span className="modal-info-value">{produto.liga}</span></div>
+              <div className="modal-info-item"><span className="modal-info-label">{t('home.material').toUpperCase()}</span><span className="modal-info-value">{t('home.material_value').toUpperCase()}</span></div>
             </div>
 
             {/* Size Selector with stock badge (A5) */}
             <div className="size-selector">
-              <span className="size-selector-label">TAMANHO</span>
+              <span className="size-selector-label">{t('home.size').toUpperCase()}</span>
               <div className="size-options">
                 {SIZES.map(size => {
                   const sizeStock = produto[`estoque_${size.toLowerCase()}`];
@@ -304,7 +298,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
                       className={`size-btn ${selectedSize === size ? 'active' : ''} ${sizeOut ? 'size-esgotado' : ''}`}
                       onClick={() => !sizeOut && setSelectedSize(size)} disabled={sizeOut}>
                       {size}
-                      {sizeOut && <span className="size-esgotado-label">ESGOTADO</span>}
+                      {sizeOut && <span className="size-esgotado-label">{t('home.sold_out')}</span>}
                     </button>
                   );
                 })}
@@ -314,42 +308,36 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             <button className="modal-add-btn" disabled={esgotado}
               onClick={() => { if (!esgotado) { onAddToCart(produto, selectedSize); onClose(); } }}>
               <ShoppingBag size={16} />
-              {esgotado ? 'ESGOTADO' : `ADICIONAR AO CARRINHO — TAM ${selectedSize}`}
+              {esgotado ? t('home.sold_out') : `${t('home.add_to_cart')} — ${t('home.size').toUpperCase()} ${selectedSize}`}
             </button>
-
-            {/* WhatsApp buy (C7) */}
-            <a className="modal-whatsapp-btn" href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMsg)}`} target="_blank" rel="noopener noreferrer">
-              <MessageCircle size={16} /> COMPRAR VIA WHATSAPP
-            </a>
 
             {/* Share (C2) */}
             <div className="modal-share-row">
-              <button onClick={handleShareWhatsApp} className="modal-share-btn"><ExternalLink size={12} /> WHATSAPP</button>
-              <button onClick={handleCopyLink} className="modal-share-btn"><Copy size={12} /> COPIAR LINK</button>
+              <button onClick={handleCopyLink} className="modal-share-btn"><Copy size={12} /> {t('home.copy_link').toUpperCase()}</button>
               {shareMsg && <span className="modal-share-msg">{shareMsg}</span>}
             </div>
 
             {/* Reviews section (C8) */}
             <div className="modal-reviews-section">
               <div className="modal-reviews-header">
-                <h4><Star size={14} /> AVALIAÇÕES ({reviews.length})</h4>
+                <h4><Star size={14} /> {t('home.reviews_title')} ({reviews.length})</h4>
                 <button className="modal-review-write-btn" onClick={() => setShowReviewForm(f => !f)}>
-                  {showReviewForm ? 'CANCELAR' : 'AVALIAR'}
+                  {showReviewForm ? t('home.review_cancel') : t('home.review_write')}
                 </button>
               </div>
 
               {showReviewForm && (
                 <div className="modal-review-form">
-                  <input type="text" placeholder="SEU NOME" value={reviewForm.nome} onChange={e => setReviewForm(p => ({ ...p, nome: e.target.value }))} />
-                  <input type="email" placeholder="SEU E-MAIL" value={reviewForm.email} onChange={e => setReviewForm(p => ({ ...p, email: e.target.value }))} />
+                  <input type="text" placeholder={t('home.review_name').toUpperCase()} value={reviewForm.nome} onChange={e => setReviewForm(p => ({ ...p, nome: e.target.value }))} />
+                  <input type="email" placeholder={t('home.review_email').toUpperCase()} value={reviewForm.email} onChange={e => setReviewForm(p => ({ ...p, email: e.target.value }))} />
                   <div className="review-stars-input">
                     {[1, 2, 3, 4, 5].map(n => (
                       <button key={n} className={`review-star-btn ${reviewForm.nota >= n ? 'active' : ''}`} onClick={() => setReviewForm(p => ({ ...p, nota: n }))}>★</button>
                     ))}
                   </div>
-                  <textarea placeholder="COMENTÁRIO (opcional)" value={reviewForm.comentario} onChange={e => setReviewForm(p => ({ ...p, comentario: e.target.value }))} rows={3} />
+                  <textarea placeholder={t('home.review_comment').toUpperCase()} value={reviewForm.comentario} onChange={e => setReviewForm(p => ({ ...p, comentario: e.target.value }))} rows={3} />
                   <button className="review-submit-btn" onClick={submitReview} disabled={reviewSending || !reviewForm.nome || !reviewForm.email}>
-                    <Send size={12} /> {reviewSending ? 'ENVIANDO...' : 'ENVIAR AVALIAÇÃO'}
+                    <Send size={12} /> {reviewSending ? '...' : t('home.review_submit')}
                   </button>
                 </div>
               )}
@@ -369,7 +357,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
                 </div>
               )}
               {reviews.length === 0 && !showReviewForm && (
-                <p style={{ opacity: 0.3, fontSize: '0.65rem', letterSpacing: 1 }}>Nenhuma avaliação ainda. Seja o primeiro!</p>
+                <p style={{ opacity: 0.3, fontSize: '0.65rem', letterSpacing: 1 }}>{t('home.no_reviews')}</p>
               )}
             </div>
           </div>
@@ -383,6 +371,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 // HOME
 // ═══════════════════════════════════════
 function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente = null }) {
+  const { t } = useI18n();
   const [allProdutos, setAllProdutos] = useState(() => {
     try {
       const cached = sessionStorage.getItem(CACHE_KEY);
@@ -406,7 +395,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
   // Load wishlist from backend on login
   useEffect(() => {
     if (!cliente?.email) return;
-    fetch(`${API}/api/cliente/wishlist?email=${encodeURIComponent(cliente.email)}`)
+    fetch(`${API_URL}/api/cliente/wishlist?email=${encodeURIComponent(cliente.email)}`)
       .then(r => r.json())
       .then(ids => {
         if (Array.isArray(ids) && ids.length > 0) {
@@ -429,7 +418,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
 
       // Sync with backend if logged in
       if (cliente?.email) {
-        fetch(`${API}/api/cliente/wishlist`, {
+        fetch(`${API_URL}/api/cliente/wishlist`, {
           method: adding ? 'POST' : 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cliente.email, produto_id: id })
@@ -447,13 +436,13 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
   const lastReload = useRef(0);
 
   useEffect(() => {
-    fetch(`${API}/api/config`).then(r => r.json()).then(setSiteConfig).catch(() => {});
+    fetch(`${API_URL}/api/config`).then(r => r.json()).then(setSiteConfig).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (allProdutos.length > 0 && forceReload === lastReload.current) { setLoading(false); return; }
     lastReload.current = forceReload;
-    fetch(`${API}/api/produtos`)
+    fetch(`${API_URL}/api/produtos`)
       .then(res => res.json())
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
@@ -490,7 +479,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
   }, [displayFilter, allProdutos]);
 
   const handleClique = useCallback((produto) => {
-    fetch(`${API}/api/clique/${produto.id}`, { method: 'POST' }).catch(() => {});
+    fetch(`${API_URL}/api/clique/${produto.id}`, { method: 'POST' }).catch(() => {});
     setSelectedProduct(produto);
   }, []);
 
@@ -501,11 +490,11 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
 
   return (
     <>
-      {showBanner && <HeroBanner config={siteConfig} />}
+      {showBanner && <HeroBanner config={siteConfig} t={t} />}
 
       <div className={gridClass}>
         {produtos.length === 0 && phase !== 'exiting' && (
-          <div className="empty-state">NENHUMA CAMISA ENCONTRADA</div>
+          <div className="empty-state">{t('home.empty')}</div>
         )}
 
         {produtos.map((produto, index) => {
@@ -521,12 +510,12 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
               style={{ '--i': Math.min(index, 11) }}
               onClick={() => handleClique(produto)}>
 
-              <LazyImage src={`${API}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
+              <LazyImage src={`${API_URL}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
 
               {/* Badges */}
-              {promoAtiva && <span className="badge-promo"><Percent size={10} /> PROMO {produto.promoLabel}</span>}
+              {promoAtiva && <span className="badge-promo"><Percent size={10} /> {t('home.promo')} {produto.promoLabel}</span>}
               {!!produto.destaque && <span className="badge-destaque"><Pin size={10} /></span>}
-              {allSizesOut && <span className="badge-esgotado">ESGOTADO</span>}
+              {allSizesOut && <span className="badge-esgotado">{t('home.sold_out')}</span>}
 
               {/* Favorite heart (C1) */}
               <button className={`card-fav-btn ${isFav ? 'active' : ''}`}
@@ -548,8 +537,8 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
                 )}
 
                 <button className="add-to-cart-btn" disabled={allSizesOut}
-                  onClick={(e) => { e.stopPropagation(); if (!allSizesOut) addToCart(produto); }}>
-                  {allSizesOut ? 'ESGOTADO' : 'ADICIONAR AO CARRINHO'}
+                  onClick={(e) => { e.stopPropagation(); if (!allSizesOut) handleClique(produto); }}>
+                  {allSizesOut ? t('home.sold_out') : t('home.add_to_cart')}
                 </button>
               </div>
             </div>
@@ -566,6 +555,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
             favorites={favorites}
             toggleFavorite={toggleFavorite}
             siteConfig={siteConfig}
+            t={t}
           />
         )}
       </AnimatePresence>

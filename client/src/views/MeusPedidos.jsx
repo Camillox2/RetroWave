@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../i18n/index.jsx';
+import { API_URL } from '../config.js';
 import { Package, Truck, CheckCircle, Clock, XCircle, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
-
-const API = 'http://localhost:3001';
 
 const STATUS_CONFIG = {
   concluido: { label: 'PEDIDO CONFIRMADO', icon: CheckCircle, step: 1 },
@@ -14,8 +14,10 @@ const STATUS_CONFIG = {
 
 function MeusPedidos({ cliente, onLogout }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [expandedPedido, setExpandedPedido] = useState(null);
 
   useEffect(() => {
@@ -24,50 +26,61 @@ function MeusPedidos({ cliente, onLogout }) {
       return;
     }
 
-    fetch(`${API}/api/cliente/pedidos?email=${encodeURIComponent(cliente.email)}`)
+    fetch(`${API_URL}/api/cliente/pedidos?email=${encodeURIComponent(cliente.email)}`)
       .then(r => r.json())
       .then(data => {
         setPedidos(data);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => { setFetchError(true); setLoading(false); });
   }, [cliente, navigate]);
 
   if (loading) {
     return (
       <div className="pedidos-page">
-        <div className="pedidos-loading">CARREGANDO PEDIDOS...</div>
+        <div className="pedidos-loading">{t('orders.loading')}</div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="pedidos-page">
+        <div className="pedidos-empty">
+          <Package size={40} strokeWidth={1} />
+          <p>{t('orders.error') || 'Erro ao carregar pedidos. Verifique sua conexão.'}</p>
+        </div>
       </div>
     );
   }
 
   const estimarEntrega = (createdAt, status) => {
     const data = new Date(createdAt);
-    if (status === 'entregue') return 'ENTREGUE';
-    if (status === 'cancelado') return 'CANCELADO';
+    if (status === 'entregue') return t('orders.delivered');
+    if (status === 'cancelado') return t('orders.cancelled');
     data.setDate(data.getDate() + 12);
-    return `PREVISÃO: ${data.toLocaleDateString('pt-BR')}`;
+    return `${t('orders.estimate')}: ${data.toLocaleDateString('pt-BR')}`;
   };
 
   return (
     <div className="pedidos-page">
       <div className="pedidos-header">
         <div>
-          <h1>MEUS PEDIDOS</h1>
+          <h1>{t('orders.title')}</h1>
           <p className="pedidos-cliente-info">
             {cliente.nome} — {cliente.email}
           </p>
         </div>
         <button className="pedidos-logout" onClick={onLogout}>
           <LogOut size={14} />
-          SAIR DA CONTA
+          {t('orders.logout')}
         </button>
       </div>
 
       {pedidos.length === 0 ? (
         <div className="pedidos-empty">
           <Package size={40} strokeWidth={1} />
-          <p>NENHUM PEDIDO ENCONTRADO</p>
+          <p>{t('orders.empty')}</p>
         </div>
       ) : (
         <div className="pedidos-list">
@@ -85,7 +98,7 @@ function MeusPedidos({ cliente, onLogout }) {
                   onClick={() => setExpandedPedido(isExpanded ? null : pedido.id)}
                 >
                   <div className="pedido-card-left">
-                    <span className="pedido-numero">PEDIDO #{pedido.id}</span>
+                    <span className="pedido-numero">{t('orders.order')} #{pedido.id}</span>
                     <span className="pedido-data">
                       {new Date(pedido.created_at).toLocaleDateString('pt-BR', {
                         day: '2-digit', month: 'long', year: 'numeric'
@@ -96,7 +109,7 @@ function MeusPedidos({ cliente, onLogout }) {
                   <div className="pedido-card-right">
                     <span className={`pedido-status-badge ${pedido.status}`}>
                       <StatusIcon size={12} />
-                      {statusInfo.label}
+                      {t(`orders.status_${pedido.status}`)}
                     </span>
                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </div>
@@ -107,7 +120,7 @@ function MeusPedidos({ cliente, onLogout }) {
                   <div className="tracking-bar">
                     <div className="tracking-progress" style={{ width: `${(statusInfo.step / 4) * 100}%` }} />
                     <div className="tracking-steps">
-                      {['Confirmado', 'Preparando', 'Enviado', 'Entregue'].map((label, i) => (
+                      {[t('orders.status_concluido'), t('orders.status_preparando'), t('orders.status_enviado'), t('orders.status_entregue')].map((label, i) => (
                         <div
                           key={label}
                           className={`tracking-step ${(i + 1) <= statusInfo.step ? 'active' : ''}`}
@@ -129,12 +142,12 @@ function MeusPedidos({ cliente, onLogout }) {
                     </div>
 
                     <div className="pedido-itens-list">
-                      <h4>ITENS DO PEDIDO</h4>
+                      <h4>{t('orders.order_items')}</h4>
                       {(pedido.itens || []).map((item, i) => (
                         <div key={i} className="pedido-item-row">
                           <div className="pedido-item-info">
                             <span className="pedido-item-nome">{item.nome}</span>
-                            <span className="pedido-item-liga">{item.liga}{item.tamanho ? ` — TAM ${item.tamanho}` : ''}</span>
+                            <span className="pedido-item-liga">{item.liga}{item.tamanho ? ` — ${t('orders.size_abbr')} ${item.tamanho}` : ''}</span>
                           </div>
                           <div className="pedido-item-valores">
                             <span className="pedido-item-qtd">×{item.quantidade}</span>
@@ -147,7 +160,7 @@ function MeusPedidos({ cliente, onLogout }) {
                     </div>
 
                     <div className="pedido-total-row">
-                      <span>TOTAL</span>
+                      <span>{t('orders.total').toUpperCase()}</span>
                       <span>R$ {parseFloat(pedido.total).toFixed(2)}</span>
                     </div>
                   </div>

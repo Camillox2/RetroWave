@@ -1,0 +1,11 @@
+version: "2"
+authtoken: SEU_TOKEN_AQUI
+tunnels:
+  frontend:
+    proto: http
+    addr: 5173
+    host_header: rewrite
+  backend:
+    proto: http
+    addr: 3001
+    host_header: rewrite

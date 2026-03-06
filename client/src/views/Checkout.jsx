@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useI18n } from '../i18n/index.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Package, Tag } from 'lucide-react';
 
-const API = 'http://localhost:3001';
+import { API_URL } from '../config';
 
-function Checkout({ cart, setCart, onClienteLogin }) {
+const Checkout = ({ cart, setCart, onClienteLogin }) => {
+
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [formData, setFormData] = useState({ email: '', nome: '', endereco: '' });
   const [consentLgpd, setConsentLgpd] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -22,12 +25,16 @@ function Checkout({ cart, setCart, onClienteLogin }) {
 
   const subtotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal || item.preco) * item.qtd, 0);
 
+  const FRETE = 29.90;
+  const FRETE_GRATIS = 299.90;
+  const freteValor = subtotal >= FRETE_GRATIS ? 0 : FRETE;
+
   let desconto = 0;
   if (cupomData) {
     if (cupomData.tipo === 'porcentagem') desconto = subtotal * (cupomData.valor / 100);
     else desconto = Math.min(cupomData.valor, subtotal);
   }
-  const total = Math.max(0, subtotal - desconto);
+  const total = Math.max(0, subtotal - desconto + freteValor);
 
   const validarCupom = async () => {
     if (!cupomCode.trim()) return;
@@ -35,7 +42,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
     setCupomError('');
     setCupomData(null);
     try {
-      const res = await fetch(`${API}/api/validar-cupom`, {
+      const res = await fetch(`${API_URL}/api/validar-cupom`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: cupomCode.trim().toUpperCase(), subtotal })
@@ -44,9 +51,9 @@ function Checkout({ cart, setCart, onClienteLogin }) {
       if (data.valid) {
         setCupomData(data.cupom);
       } else {
-        setCupomError(data.message || 'Cupom inválido');
+        setCupomError(data.message || t('checkout.error_coupon_invalid'));
       }
-    } catch { setCupomError('Erro ao validar cupom'); }
+    } catch { setCupomError(t('checkout.error_coupon_network')); }
     finally { setCupomLoading(false); }
   };
 
@@ -57,7 +64,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
     setErrMsg('');
 
     try {
-      const res = await fetch(`${API}/api/checkout`, {
+      const res = await fetch(`${API_URL}/api/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, carrinho: cart, total, cupomCodigo: cupomData?.codigo || null })
@@ -65,7 +72,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setErrMsg(data.error || 'Erro ao processar pedido. Tente novamente.');
+        setErrMsg(data.error || t('checkout.error_order'));
         return;
       }
       if (data.success) {
@@ -83,7 +90,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
         if (onClienteLogin) onClienteLogin(clienteData);
       }
     } catch (err) {
-      setErrMsg('Erro de conexão. Verifique sua internet e tente novamente.');
+      setErrMsg(t('checkout.error_network'));
     } finally {
       setEnviando(false);
     }
@@ -111,14 +118,14 @@ function Checkout({ cart, setCart, onClienteLogin }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25, duration: 0.25 }}
             >
-              COMPRA FINALIZADA
+              {t('checkout.success_title')}
             </motion.h2>
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4, duration: 0.2 }}
             >
-              PEDIDO #{pedidoId}
+              {t('checkout.success_order')} #{pedidoId}
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -128,10 +135,10 @@ function Checkout({ cart, setCart, onClienteLogin }) {
             >
               <Link to="/meus-pedidos" className="success-btn primary">
                 <Package size={14} />
-                VER MEU PEDIDO
+                {t('checkout.view_order')}
               </Link>
               <Link to="/" className="success-btn secondary">
-                CONTINUAR COMPRANDO
+                {t('checkout.continue_shopping')}
               </Link>
             </motion.div>
           </motion.div>
@@ -145,18 +152,18 @@ function Checkout({ cart, setCart, onClienteLogin }) {
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
       >
-        <h2>FINALIZAR COMPRA</h2>
+        <h2>{t('checkout.title')}</h2>
 
         {cart.length === 0 && !sucesso ? (
           <div style={{ textAlign: 'center', opacity: 0.3, padding: '60px 0', fontSize: '0.75rem', letterSpacing: '3px' }}>
-            SEU CARRINHO ESTÁ VAZIO
+            {t('checkout.empty_cart')}
           </div>
         ) : (
           <form className="checkout-form" onSubmit={handleSubmit}>
             <input
               className="checkout-input"
               type="email"
-              placeholder="E-MAIL"
+              placeholder={t('checkout.email')}
               required
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -164,14 +171,14 @@ function Checkout({ cart, setCart, onClienteLogin }) {
             <input
               className="checkout-input"
               type="text"
-              placeholder="NOME COMPLETO"
+              placeholder={t('checkout.name')}
               required
               value={formData.nome}
               onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             />
             <textarea
               className="checkout-input"
-              placeholder="ENDEREÇO DE ENTREGA"
+              placeholder={t('checkout.address')}
               required
               value={formData.endereco}
               onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
@@ -181,15 +188,15 @@ function Checkout({ cart, setCart, onClienteLogin }) {
             <div className="checkout-cupom-row">
               <div className="checkout-cupom-input-wrap">
                 <Tag size={14} />
-                <input className="checkout-cupom-input" type="text" placeholder="CUPOM DE DESCONTO"
+                <input className="checkout-cupom-input" type="text" placeholder={t('checkout.coupon_placeholder')}
                   value={cupomCode} onChange={(e) => setCupomCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), validarCupom())} />
                 <button type="button" className="checkout-cupom-btn" onClick={validarCupom} disabled={cupomLoading || !cupomCode.trim()}>
-                  {cupomLoading ? '...' : 'APLICAR'}
+                  {cupomLoading ? '...' : t('checkout.coupon_apply')}
                 </button>
               </div>
               {cupomError && <span className="checkout-cupom-error">{cupomError}</span>}
-              {cupomData && <span className="checkout-cupom-success">Cupom aplicado: {cupomData.tipo === 'porcentagem' ? `${cupomData.valor}% OFF` : `R$ ${cupomData.valor.toFixed(2)} OFF`}</span>}
+              {cupomData && <span className="checkout-cupom-success">{t('checkout.coupon_applied')}: {cupomData.tipo === 'porcentagem' ? `${cupomData.valor}% OFF` : `R$ ${cupomData.valor.toFixed(2)} OFF`}</span>}
             </div>
 
             <div className="checkout-summary">
@@ -201,12 +208,16 @@ function Checkout({ cart, setCart, onClienteLogin }) {
               ))}
               {cupomData && desconto > 0 && (
                 <div className="checkout-summary-item checkout-desconto">
-                  <span>DESCONTO ({cupomData.codigo})</span>
+                  <span>{t('checkout.discount').toUpperCase()} ({cupomData.codigo})</span>
                   <span>- R$ {desconto.toFixed(2)}</span>
                 </div>
               )}
+              <div className="checkout-summary-item">
+                <span>{t('checkout.shipping') || 'FRETE'}</span>
+                <span>{freteValor === 0 ? (t('checkout.shipping_free') || 'GRÁTIS') : `R$ ${freteValor.toFixed(2)}`}</span>
+              </div>
               <div className="checkout-total">
-                <span>TOTAL</span>
+                <span>{t('checkout.total')}</span>
                 <span>R$ {total.toFixed(2)}</span>
               </div>
             </div>
@@ -220,9 +231,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
                   required
                 />
                 <span className="lgpd-checkmark" />
-                <span className="lgpd-text">
-                  Li e concordo com a <strong>Política de Privacidade</strong> e autorizo o tratamento dos meus dados pessoais conforme a LGPD (Lei nº 13.709/2018) para fins de processamento do pedido.
-                </span>
+                <span className="lgpd-text" dangerouslySetInnerHTML={{ __html: t('checkout.lgpd_consent') }} />
               </label>
             </div>
 
@@ -237,7 +246,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
               className="checkout-submit"
               disabled={enviando || cart.length === 0 || !consentLgpd}
             >
-              {enviando ? 'PROCESSANDO...' : 'FINALIZAR PEDIDO'}
+              {enviando ? t('checkout.processing') : t('checkout.submit')}
             </button>
           </form>
         )}

@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, BarChart, Menu, Plus, Minus, Package, Search, AlertCircle, Check, ShoppingCart, Mail, Shield } from 'lucide-react';
+import { ShoppingBag, X, BarChart, Menu, Plus, Minus, Package, Search, AlertCircle, Check, ShoppingCart, Mail, Shield, Globe } from 'lucide-react';
 
 import './styles/global.css';
 import './styles/responsive.css';
 
+import { I18nProvider, useI18n } from './i18n/index.jsx';
 import Home from './views/Home';
 import AdminDashboard from './views/AdminDashboard';
 import Checkout from './views/Checkout';
 import MeusPedidos from './views/MeusPedidos';
 
 import ChatBot from './components/ChatBot';
+
+import { API_URL } from './config';
 
 import logoBranca from '/src/assets/images/white_semfundo.png';
 import logoPreta from '/src/assets/images/black_semfundo.png';
@@ -31,7 +34,7 @@ function ToastProvider({ children }) {
 
   const addToast = useCallback((message, type = 'info', duration = 2800) => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message, type, duration }]);
     setTimeout(() => removeToast(id), duration);
   }, [removeToast]);
 
@@ -73,7 +76,7 @@ function ToastProvider({ children }) {
                   className="toast-progress-bar"
                   initial={{ scaleX: 1 }}
                   animate={{ scaleX: 0 }}
-                  transition={{ duration: 2.8, ease: 'linear' }}
+                  transition={{ duration: (t.duration || 2800) / 1000, ease: 'linear' }}
                   style={{ transformOrigin: 'left' }}
                 />
               </div>
@@ -89,15 +92,16 @@ function ToastProvider({ children }) {
 // 404 PAGE
 // ═══════════════════════════════════════════════════════
 function NotFound() {
+  const { t } = useI18n();
   return (
     <div className="not-found-page">
       <div className="not-found-content">
         <h1 className="not-found-code">404</h1>
         <div className="not-found-divider" />
-        <p className="not-found-text">ESTA PÁGINA NÃO EXISTE</p>
+        <p className="not-found-text">{t('notfound.text')}</p>
       </div>
       <Link to="/" className="not-found-link">
-        VOLTAR AO INÍCIO
+        {t('notfound.back')}
       </Link>
     </div>
   );
@@ -107,6 +111,8 @@ function NotFound() {
 // MODAL — Política de Privacidade / LGPD
 // ═══════════════════════════════════════════════════════
 function PolicyModal({ isOpen, onClose }) {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (isOpen) {
       const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -138,7 +144,7 @@ function PolicyModal({ isOpen, onClose }) {
           <div className="policy-modal-header">
             <div className="policy-modal-title">
               <Shield size={18} />
-              <h2>POLÍTICA DE PRIVACIDADE</h2>
+              <h2>{t('policy.title')}</h2>
             </div>
             <button className="policy-modal-close" onClick={onClose}>
               <X size={20} />
@@ -146,82 +152,82 @@ function PolicyModal({ isOpen, onClose }) {
           </div>
 
           <div className="policy-modal-body">
-            <p className="policy-updated">Última atualização: Março de 2026</p>
+            <p className="policy-updated">{t('policy.updated')}</p>
 
             <section className="policy-section">
-              <h3>1. INFORMAÇÕES QUE COLETAMOS</h3>
-              <p>A Retro Wave coleta apenas os dados estritamente necessários para processar suas compras e garantir uma experiência de qualidade:</p>
+              <h3>{t('policy.s1_title')}</h3>
+              <p>{t('policy.s1_intro')}</p>
               <ul>
-                <li><strong>Dados de identificação:</strong> nome completo e endereço de e-mail, fornecidos no momento da compra.</li>
-                <li><strong>Endereço de entrega:</strong> para envio dos produtos adquiridos.</li>
-                <li><strong>Dados de navegação:</strong> informações anônimas de acesso (IP anonimizado) para métricas internas, sem rastreamento individual.</li>
+                <li><strong>{t('policy.s1_name').split(':')[0]}:</strong>{t('policy.s1_name').split(':').slice(1).join(':')}</li>
+                <li><strong>{t('policy.s1_address').split(':')[0]}:</strong>{t('policy.s1_address').split(':').slice(1).join(':')}</li>
+                <li><strong>{t('policy.s1_nav').split(':')[0]}:</strong>{t('policy.s1_nav').split(':').slice(1).join(':')}</li>
               </ul>
             </section>
 
             <section className="policy-section">
-              <h3>2. COMO UTILIZAMOS SEUS DADOS</h3>
-              <p>Seus dados pessoais são utilizados exclusivamente para:</p>
+              <h3>{t('policy.s2_title')}</h3>
+              <p>{t('policy.s2_intro')}</p>
               <ul>
-                <li>Processar e entregar seus pedidos;</li>
-                <li>Enviar confirmações e atualizações de status do pedido;</li>
-                <li>Permitir o acompanhamento do pedido na área "Meus Pedidos";</li>
-                <li>Cumprir obrigações legais e regulatórias.</li>
+                <li>{t('policy.s2_process')}</li>
+                <li>{t('policy.s2_confirm')}</li>
+                <li>{t('policy.s2_track')}</li>
+                <li>{t('policy.s2_legal')}</li>
               </ul>
-              <p><strong>Não vendemos, compartilhamos ou cedemos seus dados pessoais a terceiros para fins comerciais.</strong></p>
+              <p><strong>{t('policy.s2_noshare')}</strong></p>
             </section>
 
             <section className="policy-section">
-              <h3>3. BASE LEGAL (LGPD — Lei 13.709/2018)</h3>
-              <p>O tratamento de dados pessoais pela Retro Wave fundamenta-se nas seguintes bases legais previstas no Art. 7º da LGPD:</p>
+              <h3>{t('policy.s3_title')}</h3>
+              <p>{t('policy.s3_intro')}</p>
               <ul>
-                <li><strong>Consentimento (Art. 7º, I):</strong> mediante aceite explícito no momento da compra.</li>
-                <li><strong>Execução de contrato (Art. 7º, V):</strong> para viabilizar a entrega dos produtos adquiridos.</li>
-                <li><strong>Legítimo interesse (Art. 7º, IX):</strong> para métricas internas agregadas e anonimizadas.</li>
-              </ul>
-            </section>
-
-            <section className="policy-section">
-              <h3>4. ARMAZENAMENTO E SEGURANÇA</h3>
-              <ul>
-                <li>Senhas administrativas são criptografadas com <strong>bcrypt</strong> (12 rounds de salt).</li>
-                <li>Dados são armazenados em banco de dados com acesso restrito.</li>
-                <li>Não armazenamos dados de pagamento — transações são processadas por gateways seguros de terceiros.</li>
-                <li>Implementamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou destruição.</li>
+                <li><strong>{t('policy.s3_consent').split(':')[0]}:</strong>{t('policy.s3_consent').split(':').slice(1).join(':')}</li>
+                <li><strong>{t('policy.s3_contract').split(':')[0]}:</strong>{t('policy.s3_contract').split(':').slice(1).join(':')}</li>
+                <li><strong>{t('policy.s3_interest').split(':')[0]}:</strong>{t('policy.s3_interest').split(':').slice(1).join(':')}</li>
               </ul>
             </section>
 
             <section className="policy-section">
-              <h3>5. SEUS DIREITOS (Art. 18 — LGPD)</h3>
-              <p>Você tem o direito de, a qualquer momento:</p>
+              <h3>{t('policy.s4_title')}</h3>
               <ul>
-                <li>Confirmar a existência de tratamento de seus dados;</li>
-                <li>Acessar, corrigir ou atualizar seus dados pessoais;</li>
-                <li>Solicitar a anonimização, bloqueio ou eliminação de dados desnecessários;</li>
-                <li>Revogar o consentimento a qualquer momento;</li>
-                <li>Solicitar a portabilidade de dados;</li>
-                <li>Obter informações sobre compartilhamento de dados.</li>
+                <li>{t('policy.s4_bcrypt')}</li>
+                <li>{t('policy.s4_db')}</li>
+                <li>{t('policy.s4_payment')}</li>
+                <li>{t('policy.s4_measures')}</li>
               </ul>
-              <p>Para exercer qualquer desses direitos, entre em contato pelo e-mail <strong>retroswaves@gmail.com</strong>.</p>
             </section>
 
             <section className="policy-section">
-              <h3>6. COOKIES E ARMAZENAMENTO LOCAL</h3>
-              <p>Utilizamos <strong>localStorage</strong> do navegador exclusivamente para:</p>
+              <h3>{t('policy.s5_title')}</h3>
+              <p>{t('policy.s5_intro')}</p>
               <ul>
-                <li>Manter a sessão do cliente ativa (dados de login invisível);</li>
-                <li>Preservar o conteúdo do carrinho durante a navegação.</li>
+                <li>{t('policy.s5_confirm')}</li>
+                <li>{t('policy.s5_access')}</li>
+                <li>{t('policy.s5_delete')}</li>
+                <li>{t('policy.s5_revoke')}</li>
+                <li>{t('policy.s5_port')}</li>
+                <li>{t('policy.s5_info')}</li>
               </ul>
-              <p>Não utilizamos cookies de rastreamento, publicidade ou analytics de terceiros.</p>
+              <p>{t('policy.s5_contact')}</p>
             </section>
 
             <section className="policy-section">
-              <h3>7. RETENÇÃO DE DADOS</h3>
-              <p>Os dados pessoais são mantidos enquanto houver relação comercial ativa ou conforme exigido por obrigações legais (Art. 16, LGPD). Após solicitação de exclusão, os dados são removidos no prazo máximo de 15 dias úteis.</p>
+              <h3>{t('policy.s6_title')}</h3>
+              <p>{t('policy.s6_intro')}</p>
+              <ul>
+                <li>{t('policy.s6_session')}</li>
+                <li>{t('policy.s6_cart')}</li>
+              </ul>
+              <p>{t('policy.s6_notrack')}</p>
             </section>
 
             <section className="policy-section">
-              <h3>8. CONTATO DO ENCARREGADO (DPO)</h3>
-              <p>Para questões relacionadas à privacidade e proteção de dados:</p>
+              <h3>{t('policy.s7_title')}</h3>
+              <p>{t('policy.s7_text')}</p>
+            </section>
+
+            <section className="policy-section">
+              <h3>{t('policy.s8_title')}</h3>
+              <p>{t('policy.s8_text')}</p>
               <p className="policy-contact">
                 <Mail size={14} />
                 <a href="mailto:retroswaves@gmail.com">retroswaves@gmail.com</a>
@@ -245,10 +251,24 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [policyOpen, setPolicyOpen] = useState(false);
   const [forceReload, setForceReload] = useState(0);
+  const [nlEmail, setNlEmail] = useState('');
+  const [nlStatus, setNlStatus] = useState('');
   const [filterLocked, setFilterLocked] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const location = useLocation();
   const toast = useToast();
+  const { lang, setLang, t, langs } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Close lang dropdown on outside click
+  useEffect(() => {
+    if (!langOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest('.lang-switcher-wrap')) setLangOpen(false);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [langOpen]);
 
   const ligas = [
     'BUNDESLIGA', 'LIGA PORTUGUESA', 'LIGUE 1', 'BRASILEIRÃO', 'SERIE A'
@@ -327,6 +347,7 @@ function AppContent() {
   }, [isCartOpen, isMobileMenuOpen]);
 
   // Adicionar ao carrinho (com tamanho, incrementa qty se mesmo id+tamanho)
+  // Toast for cart with i18n
   const addToCart = (product, tamanho = 'M') => {
     setCart(prev => {
       const existingIndex = prev.findIndex(item => item.id === product.id && item.tamanho === tamanho);
@@ -337,7 +358,7 @@ function AppContent() {
       }
       return [...prev, { ...product, tamanho, qtd: 1 }];
     });
-    toast.cart(`${product.nome} — TAM ${tamanho}`);
+    toast.cart(`${product.nome} — ${t('cart.size_label')} ${tamanho}`);
   };
 
   const updateQty = (index, delta) => {
@@ -359,7 +380,7 @@ function AppContent() {
   useEffect(() => {
     if (!cliente?.email || cart.length === 0) return;
     const timer = setTimeout(() => {
-      fetch('http://localhost:3001/api/carrinho-abandonado', {
+      fetch(`${API_URL}/api/carrinho-abandonado`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cliente.email, carrinho: cart })
@@ -371,13 +392,13 @@ function AppContent() {
   // Recover abandoned cart on login
   useEffect(() => {
     if (!cliente?.email || cart.length > 0) return;
-    fetch(`http://localhost:3001/api/carrinho-abandonado?email=${encodeURIComponent(cliente.email)}`)
+    fetch(`${API_URL}/api/carrinho-abandonado?email=${encodeURIComponent(cliente.email)}`)
       .then(r => r.json())
       .then(data => {
         if (data.carrinho?.length > 0) {
           setCart(data.carrinho);
-          toast.info(`Carrinho restaurado (${data.carrinho.length} itens)`);
-          fetch('http://localhost:3001/api/carrinho-abandonado/recuperar', {
+          toast.info(t('cart.restored').replace('{count}', data.carrinho.length));
+          fetch(`${API_URL}/api/carrinho-abandonado/recuperar`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: cliente.email })
@@ -387,7 +408,33 @@ function AppContent() {
       .catch(() => {});
   }, [cliente?.email]);
 
-  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes'];
+  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes', 'newsletter'];
+  const adminTabLabels = {
+    dashboard: 'PAINEL', produtos: 'PRODUTOS', banner: 'BANNER', config: 'CONFIG',
+    despesas: 'DESPESAS', pedidos: 'PEDIDOS', cupons: 'CUPONS', avaliacoes: 'REVIEWS', newsletter: 'NEWSLETTER'
+  };
+
+  const handleNewsletterSubmit = async (e) => {
+    e.preventDefault();
+    if (!nlEmail.trim()) return;
+    setNlStatus('...');
+    try {
+      const res = await fetch(`${API_URL}/api/newsletter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: nlEmail.trim(), nome: cliente?.nome || '' })
+      });
+      if (res.ok) {
+        setNlStatus(t('footer.newsletter_success'));
+        setNlEmail('');
+        setTimeout(() => setNlStatus(''), 4000);
+      } else {
+        setNlStatus(t('footer.newsletter_error'));
+      }
+    } catch {
+      setNlStatus(t('footer.newsletter_error'));
+    }
+  };
   const adminTabAtiva = searchParams.get('tab') || 'dashboard';
 
   const handleFilterClick = (liga) => {
@@ -426,7 +473,7 @@ function AppContent() {
                 className={`filter-btn ${adminTabAtiva === tab ? 'active' : ''}`}
                 onClick={() => setSearchParams({ tab })}
               >
-                {tab === 'avaliacoes' ? 'REVIEWS' : tab.toUpperCase()}
+                {adminTabLabels[tab]}
               </button>
             ))}
           </nav>
@@ -446,6 +493,39 @@ function AppContent() {
         )}
 
         <div className="header-actions">
+          {/* Language switcher */}
+          <div className="lang-switcher-wrap">
+            <button
+              className={`header-search-toggle lang-toggle ${langOpen ? 'active' : ''}`}
+              onClick={() => setLangOpen(v => !v)}
+              aria-label="Idioma"
+            >
+              <Globe size={17} />
+              <span className="lang-current">{lang.toUpperCase()}</span>
+            </button>
+            <AnimatePresence>
+              {langOpen && (
+                <motion.div
+                  className="lang-dropdown"
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  {langs.map(l => (
+                    <button
+                      key={l}
+                      className={`lang-option ${lang === l ? 'lang-active' : ''}`}
+                      onClick={() => { setLang(l); setLangOpen(false); }}
+                    >
+                      <span className="lang-flag">{l === 'pt' ? '🇧🇷' : l === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+                      {t(`lang.${l}`)}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           {/* Search toggle */}
           <button
             className={`header-search-toggle ${searchOpen ? 'active' : ''}`}
@@ -459,12 +539,12 @@ function AppContent() {
             <Search size={18} />
           </button>
           {cliente && (
-            <Link to="/meus-pedidos" className="header-user-btn" title="Meus Pedidos">
+            <Link to="/meus-pedidos" className="header-user-btn" title={t('header.my_orders')}>
               <Package size={18} />
             </Link>
           )}
-          <Link to="/admin" aria-label="Painel Admin"><BarChart size={18} /></Link>
-          <button onClick={() => setIsCartOpen(true)} style={{ position: 'relative' }} aria-label="Carrinho">
+          <Link to="/admin" aria-label={t('header.admin')}><BarChart size={18} /></Link>
+          <button onClick={() => setIsCartOpen(true)} style={{ position: 'relative' }} aria-label={t('header.cart')}>
             <ShoppingBag size={20} />
             {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
           </button>
@@ -486,11 +566,11 @@ function AppContent() {
               <input
                 type="text"
                 className="search-input"
-                placeholder="BUSCAR CAMISAS..."
+                placeholder={t('header.search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
-                aria-label="Buscar camisas"
+                aria-label={t('header.search_placeholder')}
               />
               {searchQuery && (
                 <button className="search-clear" onClick={() => setSearchQuery('')}>
@@ -536,7 +616,7 @@ function AppContent() {
               className="mobile-menu"
             >
               <div className="mobile-menu-header">
-                <h2>{location.pathname === '/admin' ? 'ADMIN' : 'LIGAS'}</h2>
+                <h2>{location.pathname === '/admin' ? 'ADMIN' : t('mobile_menu.leagues')}</h2>
                 <button onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button>
               </div>
 
@@ -548,7 +628,7 @@ function AppContent() {
                       className={`mobile-menu-item ${adminTabAtiva === tab ? 'active' : ''}`}
                       onClick={() => { setSearchParams({ tab }); setIsMobileMenuOpen(false); }}
                     >
-                      {tab === 'avaliacoes' ? 'REVIEWS' : tab.toUpperCase()}
+                      {adminTabLabels[tab]}
                     </button>
                   ))}
                 </>
@@ -558,7 +638,7 @@ function AppContent() {
                     className={`mobile-menu-item ${ligaAtiva === '' ? 'active' : ''}`}
                     onClick={() => handleFilterClick('')}
                   >
-                    TODAS
+                    {t('mobile_menu.all')}
                   </button>
                   {ligas.map(liga => (
                     <button
@@ -595,12 +675,12 @@ function AppContent() {
               className="cart-drawer"
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h2>CARRINHO ({cartCount})</h2>
+                <h2>{t('cart.title')} ({cartCount})</h2>
                 <button onClick={() => setIsCartOpen(false)}><X size={20} /></button>
               </div>
 
               {cart.length === 0 ? (
-                <div className="cart-empty">CARRINHO VAZIO</div>
+                <div className="cart-empty">{t('cart.empty')}</div>
               ) : (
                 <>
                   <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain' }}>
@@ -609,10 +689,10 @@ function AppContent() {
                         key={`${item.id}-${item.tamanho || 'M'}`}
                         className="cart-item"
                       >
-                        <img src={`http://localhost:3001/api/produtos/${item.id}/thumb`} alt={item.nome} />
+                        <img src={`${API_URL}/api/produtos/${item.id}/thumb`} alt={item.nome} />
                         <div className="cart-item-info">
                           <span className="name">{item.nome}</span>
-                          <span className="cart-item-size">TAM: {item.tamanho || 'M'}</span>
+                          <span className="cart-item-size">{t('cart.size_label')}: {item.tamanho || 'M'}</span>
                           <span className="price">R$ {(parseFloat(item.precoFinal || item.preco) * item.qtd).toFixed(2)}</span>
                           <div className="cart-item-actions">
                             <button className="qty-btn" onClick={() => updateQty(index, -1)}>
@@ -623,7 +703,7 @@ function AppContent() {
                               <Plus size={12} />
                             </button>
                             <button className="remove-btn" onClick={() => removeFromCart(index)}>
-                              REMOVER
+                              {t('cart.remove').toUpperCase()}
                             </button>
                           </div>
                         </div>
@@ -633,7 +713,7 @@ function AppContent() {
 
                   <div className="cart-footer">
                     <div className="cart-total">
-                      <span>TOTAL</span>
+                      <span>{t('cart.total').toUpperCase()}</span>
                       <span>R$ {cartTotal.toFixed(2)}</span>
                     </div>
                     <Link
@@ -641,7 +721,7 @@ function AppContent() {
                       className="checkout-btn"
                       onClick={() => setIsCartOpen(false)}
                     >
-                      CONCLUIR COMPRA
+                      {t('cart.checkout')}
                     </Link>
                   </div>
                 </>
@@ -659,10 +739,26 @@ function AppContent() {
             <p className="footer-copy">&copy; 2026 DC Foundry Digital. By Vitor Camillo.</p>
           </div>
 
+          <form className="footer-newsletter" onSubmit={handleNewsletterSubmit}>
+            <span className="footer-nl-label"><Mail size={12} /> {t('footer.newsletter_label')}</span>
+            <div className="footer-nl-row">
+              <input
+                type="email"
+                placeholder={t('footer.newsletter_placeholder')}
+                value={nlEmail}
+                onChange={(e) => setNlEmail(e.target.value)}
+                required
+                className="footer-nl-input"
+              />
+              <button type="submit" className="footer-nl-btn">{t('footer.newsletter_btn')}</button>
+            </div>
+            {nlStatus && <span className="footer-nl-status">{nlStatus}</span>}
+          </form>
+
           <div className="footer-links">
             <button className="footer-link" onClick={() => setPolicyOpen(true)}>
               <Shield size={12} />
-              POLÍTICA DE PRIVACIDADE
+              {t('footer.privacy_policy')}
             </button>
             <span className="footer-separator">|</span>
             <a href="mailto:retroswaves@gmail.com" className="footer-link">
@@ -672,7 +768,7 @@ function AppContent() {
           </div>
 
           <p className="footer-lgpd">
-            Em conformidade com a LGPD — Lei Geral de Proteção de Dados (Lei nº 13.709/2018)
+            {t('footer.lgpd_text')}
           </p>
         </div>
       </footer>
@@ -689,9 +785,11 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </I18nProvider>
     </Router>
   );
 }

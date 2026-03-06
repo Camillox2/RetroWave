@@ -475,8 +475,5 @@
   /* Checkout cupom */
   .checkout-cupom-input-wrap { flex-wrap: wrap; }
   .checkout-cupom-btn { width: 100%; justify-content: center; text-align: center; }
-
-  /* WhatsApp btn */
-  .modal-whatsapp-btn { font-size: 0.5rem; padding: 10px 16px; }
 }
 

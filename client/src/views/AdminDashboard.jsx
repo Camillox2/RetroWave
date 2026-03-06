@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter } from 'lucide-react';
+import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail } from 'lucide-react';
 import { AreaChart, Area, BarChart as RChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const API = 'http://localhost:3001';
+import { API_URL } from '../config';
+
 const LIGAS = ['BUNDESLIGA', 'LIGA PORTUGUESA', 'LIGUE 1', 'BRASILEIRÃO', 'SERIE A'];
 const PRODUCTS_PER_PAGE = 20;
 
@@ -100,7 +101,7 @@ const AdminThumb = React.memo(function AdminThumb({ produtoId, nome }) {
       {!loaded && <div className="shimmer-thumb-inner" />}
       {inView && (
         <img
-          src={`${API}/api/produtos/${produtoId}/thumb`}
+          src={`${API_URL}/api/produtos/${produtoId}/thumb`}
           alt={nome}
           loading="lazy"
           decoding="async"
@@ -241,6 +242,18 @@ function AdminDashboard() {
   // Avaliações admin (C8)
   const [avaliacoes, setAvaliacoes] = useState([]);
 
+  // Newsletter
+  const [nlSubscribers, setNlSubscribers] = useState([]);
+  const [nlAssunto, setNlAssunto] = useState('');
+  const [nlConteudo, setNlConteudo] = useState('');
+  const [nlEnviando, setNlEnviando] = useState(false);
+
+  // AI Assistant for Newsletter
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMessages, setAiMessages] = useState([]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
   // Batch actions (A9)
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [batchMode, setBatchMode] = useState(false);
@@ -257,6 +270,11 @@ function AdminDashboard() {
   const dragItem = useRef(null);
   const dragOver = useRef(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ open: false, msg: '', onConfirm: null });
+  const openConfirm = (msg, onConfirm) => setConfirmModal({ open: true, msg, onConfirm });
+  const closeConfirm = () => setConfirmModal({ open: false, msg: '', onConfirm: null });
 
   const showToast = (msg) => {
     setToast(msg);
@@ -281,7 +299,7 @@ function AdminDashboard() {
     e.preventDefault();
     setLoginError('');
     try {
-      const res = await fetch(`${API}/api/admin/login`, {
+      const res = await fetch(`${API_URL}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginData)
@@ -297,7 +315,7 @@ function AdminDashboard() {
   };
 
   // Track which data sets have been loaded to avoid redundant fetches
-  const loadedRef = useRef({ stats: false, produtos: false, despesas: false, pedidos: false, config: false, cupons: false, avaliacoes: false, chart: false });
+  const loadedRef = useRef({ stats: false, produtos: false, despesas: false, pedidos: false, config: false, cupons: false, avaliacoes: false, chart: false, newsletter: false });
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -315,43 +333,48 @@ function AdminDashboard() {
     const loaded = loadedRef.current;
 
     if (force || !loaded.stats) {
-      adminFetch(`${API}/api/admin/stats`).then(r => r.json()).then(d => { setStats(d); loaded.stats = true; }).catch(() => {});
+      adminFetch(`${API_URL}/api/admin/stats`).then(r => r.json()).then(d => { setStats(d); loaded.stats = true; }).catch(() => {});
     }
 
     if (tab === 'dashboard' || tab === 'produtos') {
       if (force || !loaded.produtos) {
         setProdutosLoading(true);
-        adminFetch(`${API}/api/admin/produtos?limit=500`).then(r => r.json()).then(d => { setProdutos(d.produtos || d); setProdutosLoading(false); loaded.produtos = true; }).catch(() => setProdutosLoading(false));
+        adminFetch(`${API_URL}/api/admin/produtos?limit=500`).then(r => r.json()).then(d => { setProdutos(d.produtos || d); setProdutosLoading(false); loaded.produtos = true; }).catch(() => setProdutosLoading(false));
       }
     }
     if (tab === 'despesas' || tab === 'dashboard') {
       if (force || !loaded.despesas) {
-        adminFetch(`${API}/api/admin/despesas`).then(r => r.json()).then(d => { setDespesas(d); loaded.despesas = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/despesas`).then(r => r.json()).then(d => { setDespesas(d); loaded.despesas = true; }).catch(() => {});
       }
     }
     if (tab === 'pedidos' || tab === 'dashboard') {
       if (force || !loaded.pedidos) {
-        adminFetch(`${API}/api/admin/pedidos`).then(r => r.json()).then(d => { setPedidos(d); loaded.pedidos = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/pedidos`).then(r => r.json()).then(d => { setPedidos(d); loaded.pedidos = true; }).catch(() => {});
       }
     }
     if (tab === 'banner' || tab === 'config') {
       if (force || !loaded.config) {
-        adminFetch(`${API}/api/admin/config`).then(r => r.json()).then(d => { setSiteConfig(d); loaded.config = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/config`).then(r => r.json()).then(d => { setSiteConfig(d); loaded.config = true; }).catch(() => {});
       }
     }
     if (tab === 'cupons') {
       if (force || !loaded.cupons) {
-        adminFetch(`${API}/api/admin/cupons`).then(r => r.json()).then(d => { setCupons(d); loaded.cupons = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/cupons`).then(r => r.json()).then(d => { setCupons(d); loaded.cupons = true; }).catch(() => {});
       }
     }
     if (tab === 'avaliacoes') {
       if (force || !loaded.avaliacoes) {
-        adminFetch(`${API}/api/admin/avaliacoes`).then(r => r.json()).then(d => { setAvaliacoes(d); loaded.avaliacoes = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/avaliacoes`).then(r => r.json()).then(d => { setAvaliacoes(d); loaded.avaliacoes = true; }).catch(() => {});
       }
     }
     if (tab === 'dashboard') {
       if (force || !loaded.chart) {
-        adminFetch(`${API}/api/admin/stats/historico?dias=30`).then(r => r.json()).then(d => { setChartData(d); loaded.chart = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/stats/historico?dias=30`).then(r => r.json()).then(d => { setChartData(d); loaded.chart = true; }).catch(() => {});
+      }
+    }
+    if (tab === 'newsletter') {
+      if (force || !loaded.newsletter) {
+        adminFetch(`${API_URL}/api/admin/newsletter`).then(r => r.json()).then(d => { setNlSubscribers(d); loaded.newsletter = true; }).catch(() => {});
       }
     }
   };
@@ -359,7 +382,7 @@ function AdminDashboard() {
   // ── PRODUCT EDITOR ──
   const openProductEditor = async (produtoId) => {
     try {
-      const res = await adminFetch(`${API}/api/admin/produtos/${produtoId}`);
+      const res = await adminFetch(`${API_URL}/api/admin/produtos/${produtoId}`);
       const data = await res.json();
       setEditingProduct({ ...data, _imageChanged: false });
       setIsCreating(false);
@@ -397,7 +420,7 @@ function AdminDashboard() {
         }));
       } else {
         try {
-          const res = await adminFetch(`${API}/api/admin/produtos/${editingProduct.id}/imagens`, {
+          const res = await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}/imagens`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imagem: base64 })
@@ -421,7 +444,7 @@ function AdminDashboard() {
       return;
     }
     try {
-      await adminFetch(`${API}/api/admin/imagens/${imgId}`, { method: 'DELETE' });
+      await adminFetch(`${API_URL}/api/admin/imagens/${imgId}`, { method: 'DELETE' });
       setEditingProduct(prev => ({ ...prev, imagens: prev.imagens.filter(i => i.id !== imgId) }));
     } catch {
       showToast('Erro ao deletar imagem');
@@ -463,7 +486,7 @@ function AdminDashboard() {
         }));
       } else {
         try {
-          const res = await adminFetch(`${API}/api/admin/produtos/${editingProduct.id}/imagens`, {
+          const res = await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}/imagens`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imagem: base64 })
@@ -501,7 +524,7 @@ function AdminDashboard() {
           estoque_p: editingProduct.estoque_p ?? -1, estoque_m: editingProduct.estoque_m ?? -1,
           estoque_g: editingProduct.estoque_g ?? -1, estoque_gg: editingProduct.estoque_gg ?? -1,
         };
-        const res = await adminFetch(`${API}/api/admin/produtos`, {
+        const res = await adminFetch(`${API_URL}/api/admin/produtos`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         });
         const data = await res.json();
@@ -518,12 +541,12 @@ function AdminDashboard() {
           estoque_g: editingProduct.estoque_g ?? -1, estoque_gg: editingProduct.estoque_gg ?? -1,
         };
         if (editingProduct._imageChanged) body.imagem = editingProduct.imagem;
-        await adminFetch(`${API}/api/admin/produtos/${editingProduct.id}`, {
+        await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         });
         const ordens = editingProduct.imagens.filter(i => !i._local).map(i => ({ id: i.id, ordem: i.ordem }));
         if (ordens.length > 0) {
-          await adminFetch(`${API}/api/admin/produtos/${editingProduct.id}/imagens/reorder`, {
+          await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}/imagens/reorder`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ordens })
           });
         }
@@ -538,17 +561,18 @@ function AdminDashboard() {
   };
 
   const deleteProduto = async (id) => {
-    if (!confirm('Deletar este produto?')) return;
-    await adminFetch(`${API}/api/admin/produtos/${id}`, { method: 'DELETE' });
-    showToast('Produto deletado');
-    loadData('produtos');
+    openConfirm('Deletar este produto?', async () => {
+      await adminFetch(`${API_URL}/api/admin/produtos/${id}`, { method: 'DELETE' });
+      showToast('Produto deletado');
+      loadData('produtos');
+    });
   };
 
   // Duplicate product (A4)
   const duplicateProduct = async (id, e) => {
     e.stopPropagation();
     try {
-      const res = await adminFetch(`${API}/api/admin/produtos/${id}/duplicar`, { method: 'POST' });
+      const res = await adminFetch(`${API_URL}/api/admin/produtos/${id}/duplicar`, { method: 'POST' });
       const data = await res.json();
       if (data.success) { showToast('Produto duplicado!'); loadData('produtos'); }
     } catch { showToast('Erro ao duplicar'); }
@@ -556,7 +580,7 @@ function AdminDashboard() {
 
   const toggleDestaque = async (id, e) => {
     e.stopPropagation();
-    await adminFetch(`${API}/api/admin/produtos/${id}/destaque`, { method: 'PUT' });
+    await adminFetch(`${API_URL}/api/admin/produtos/${id}/destaque`, { method: 'PUT' });
     loadData('produtos');
   };
 
@@ -571,19 +595,21 @@ function AdminDashboard() {
   };
 
   const batchDelete = async () => {
-    if (!confirm(`Deletar ${selectedIds.size} produtos?`)) return;
-    for (const id of selectedIds) {
-      await adminFetch(`${API}/api/admin/produtos/${id}`, { method: 'DELETE' }).catch(() => {});
-    }
-    setSelectedIds(new Set());
-    setBatchMode(false);
-    showToast(`${selectedIds.size} produtos deletados`);
-    loadData('produtos');
+    const count = selectedIds.size;
+    openConfirm(`Deletar ${count} produtos?`, async () => {
+      for (const id of selectedIds) {
+        await adminFetch(`${API_URL}/api/admin/produtos/${id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      setSelectedIds(new Set());
+      setBatchMode(false);
+      showToast(`${count} produtos deletados`);
+      loadData('produtos');
+    });
   };
 
   const batchToggleDestaque = async () => {
     for (const id of selectedIds) {
-      await adminFetch(`${API}/api/admin/produtos/${id}/destaque`, { method: 'PUT' }).catch(() => {});
+      await adminFetch(`${API_URL}/api/admin/produtos/${id}/destaque`, { method: 'PUT' }).catch(() => {});
     }
     setSelectedIds(new Set());
     setBatchMode(false);
@@ -595,7 +621,7 @@ function AdminDashboard() {
   const saveConfig = async () => {
     setConfigSaving(true);
     try {
-      await adminFetch(`${API}/api/admin/config`, {
+      await adminFetch(`${API_URL}/api/admin/config`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(siteConfig)
       });
       showToast('Configurações salvas!');
@@ -614,22 +640,28 @@ function AdminDashboard() {
   // CRUD Despesas
   const handleDespesaSubmit = async (e) => {
     e.preventDefault();
-    const url = editingDespesa ? `${API}/api/admin/despesas/${editingDespesa.id}` : `${API}/api/admin/despesas`;
+    const url = editingDespesa ? `${API_URL}/api/admin/despesas/${editingDespesa.id}` : `${API_URL}/api/admin/despesas`;
     const method = editingDespesa ? 'PUT' : 'POST';
-    await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingDespesa || novaDespesa) });
-    setNovaDespesa({ descricao: '', valor: '', data_despesa: '' });
-    setEditingDespesa(null);
-    loadData('despesas');
+    try {
+      const res = await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingDespesa || novaDespesa) });
+      if (!res.ok) throw new Error('Erro ao salvar');
+      setNovaDespesa({ descricao: '', valor: '', data_despesa: '' });
+      setEditingDespesa(null);
+      loadData('despesas');
+    } catch {
+      showToast('Erro ao salvar despesa');
+    }
   };
 
   const deleteDespesa = async (id) => {
-    if (!confirm('Deletar despesa?')) return;
-    await adminFetch(`${API}/api/admin/despesas/${id}`, { method: 'DELETE' });
-    loadData('despesas');
+    openConfirm('Deletar despesa?', async () => {
+      await adminFetch(`${API_URL}/api/admin/despesas/${id}`, { method: 'DELETE' });
+      loadData('despesas');
+    });
   };
 
   const updatePedidoStatus = async (pedidoId, novoStatus) => {
-    await adminFetch(`${API}/api/admin/pedidos/${pedidoId}/status`, {
+    await adminFetch(`${API_URL}/api/admin/pedidos/${pedidoId}/status`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: novoStatus })
     });
     loadData('pedidos');
@@ -639,7 +671,7 @@ function AdminDashboard() {
   const handleCupomSubmit = async (e) => {
     e.preventDefault();
     const data = editingCupom || novoCupom;
-    const url = editingCupom ? `${API}/api/admin/cupons/${editingCupom.id}` : `${API}/api/admin/cupons`;
+    const url = editingCupom ? `${API_URL}/api/admin/cupons/${editingCupom.id}` : `${API_URL}/api/admin/cupons`;
     const method = editingCupom ? 'PUT' : 'POST';
     try {
       const res = await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -653,22 +685,119 @@ function AdminDashboard() {
   };
 
   const deleteCupom = async (id) => {
-    if (!confirm('Deletar cupom?')) return;
-    await adminFetch(`${API}/api/admin/cupons/${id}`, { method: 'DELETE' });
-    loadData('cupons');
+    openConfirm('Deletar cupom?', async () => {
+      await adminFetch(`${API_URL}/api/admin/cupons/${id}`, { method: 'DELETE' });
+      loadData('cupons');
+    });
   };
 
   // Avaliações admin (C8)
   const toggleAprovacao = async (id) => {
-    await adminFetch(`${API}/api/admin/avaliacoes/${id}/aprovar`, { method: 'PUT' });
+    await adminFetch(`${API_URL}/api/admin/avaliacoes/${id}/aprovar`, { method: 'PUT' });
     loadData('avaliacoes');
   };
 
   const deleteAvaliacao = async (id) => {
-    if (!confirm('Deletar avaliação?')) return;
-    await adminFetch(`${API}/api/admin/avaliacoes/${id}`, { method: 'DELETE' });
-    loadData('avaliacoes');
+    openConfirm('Deletar avaliação?', async () => {
+      await adminFetch(`${API_URL}/api/admin/avaliacoes/${id}`, { method: 'DELETE' });
+      loadData('avaliacoes');
+    });
   };
+
+  // Newsletter actions
+  const deleteSubscriber = async (id) => {
+    openConfirm('Remover inscrito?', async () => {
+      await adminFetch(`${API_URL}/api/admin/newsletter/${id}`, { method: 'DELETE' });
+      loadData('newsletter');
+    });
+  };
+
+  const enviarNewsletter = async (e) => {
+    e.preventDefault();
+    if (!nlAssunto.trim() || !nlConteudo.trim()) return;
+    const activeCount = nlSubscribers.filter(s => s.ativo).length;
+    openConfirm(`Enviar email para ${activeCount} inscrito(s)?`, async () => {
+      await doEnviarNewsletter();
+    });
+  };
+
+  const doEnviarNewsletter = async () => {
+    setNlEnviando(true);
+    try {
+      const res = await adminFetch(`${API_URL}/api/admin/newsletter/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assunto: nlAssunto, conteudo: nlConteudo })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Email enviado para ${data.enviados} inscrito(s)${data.erros > 0 ? ` (${data.erros} erro(s))` : ''}`);
+        setNlAssunto('');
+        setNlConteudo('');
+      } else {
+        showToast(data.error || 'Erro ao enviar');
+      }
+    } catch { showToast('Erro ao enviar newsletter'); }
+    setNlEnviando(false);
+  }; // end doEnviarNewsletter
+
+  // AI Assistant for newsletter
+  const AI_SYSTEM = `Você é um assistente de marketing da Retro Wave, loja de camisas retrô de futebol.
+Ajude o administrador a:
+- Escrever assuntos e conteúdos de email marketing
+- Criar promoções e campanhas
+- Sugerir ideias de newsletter
+- Melhorar textos existentes
+Seja direto e criativo. Responda sempre em português brasileiro.
+Quando sugerir um email, separe claramente ASSUNTO: e CONTEÚDO: em linhas separadas.
+Use tom profissional mas envolvente para fãs de futebol.
+IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marcação. Escreva texto puro e limpo, pronto para ser enviado por email. Sem asteriscos, sem hashtags, sem bullets com *.`;
+
+  const stripMarkdown = (text) => {
+    return text
+      .replace(/#{1,6}\s?/g, '')
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+      .replace(/_{1,2}([^_]+)_{1,2}/g, '$1')
+      .replace(/`{1,3}[^`]*`{1,3}/g, '')
+      .replace(/^[-*+]\s/gm, '• ')
+      .replace(/^\d+\.\s/gm, '')
+      .trim();
+  };
+
+  const sendAiMessage = useCallback(async (text) => {
+    if (!text.trim() || aiLoading) return;
+    const userMsg = { role: 'user', text: text.trim() };
+    setAiMessages(prev => [...prev, userMsg]);
+    setAiInput('');
+    setAiLoading(true);
+    try {
+      const geminiMsgs = [
+        { role: 'user', parts: [{ text: AI_SYSTEM }] },
+        { role: 'model', parts: [{ text: 'Entendido! Sou o assistente de marketing da Retro Wave. Como posso ajudar?' }] }
+      ];
+      const recent = [...aiMessages, userMsg].slice(-20);
+      for (const msg of recent) {
+        geminiMsgs.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: msg.text }] });
+      }
+      const res = await fetch(`${API_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: geminiMsgs }) });
+      const data = await res.json();
+      if (res.ok && data.reply) {
+        setAiMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+      } else {
+        setAiMessages(prev => [...prev, { role: 'assistant', text: 'Erro ao gerar resposta. Tente novamente.' }]);
+      }
+    } catch {
+      setAiMessages(prev => [...prev, { role: 'assistant', text: 'Erro de conexão com a IA.' }]);
+    }
+    setAiLoading(false);
+  }, [aiMessages, aiLoading]);
+
+  const aiQuickPrompts = [
+    'Escreva um email de promoção de 20% para camisas retrô',
+    'Sugira 5 assuntos criativos de newsletter',
+    'Crie um email anunciando novas camisas da SERIE A',
+    'Escreva um email de boas-vindas para novos inscritos'
+  ];
 
   // Metrics period filter (A8)
   const loadPeriodStats = async (period) => {
@@ -681,7 +810,7 @@ function AdminDashboard() {
     else if (period === 'mes') { d.setDate(d.getDate() - 30); inicio = d.toISOString().split('T')[0]; }
     else if (period === 'custom') { inicio = customRange.inicio; fim = customRange.fim; if (!inicio || !fim) return; }
     try {
-      const res = await adminFetch(`${API}/api/admin/stats/periodo?inicio=${inicio}&fim=${fim}`);
+      const res = await adminFetch(`${API_URL}/api/admin/stats/periodo?inicio=${inicio}&fim=${fim}`);
       setPeriodStats(await res.json());
     } catch { setPeriodStats(null); }
   };
@@ -704,23 +833,24 @@ function AdminDashboard() {
   }, []);
 
   const handleToggleDestaque = useCallback(async (id) => {
-    await adminFetch(`${API}/api/admin/produtos/${id}/destaque`, { method: 'PUT' });
+    await adminFetch(`${API_URL}/api/admin/produtos/${id}/destaque`, { method: 'PUT' });
     loadData('produtos');
   }, []);
 
   const handleDuplicate = useCallback(async (id) => {
     try {
-      const res = await adminFetch(`${API}/api/admin/produtos/${id}/duplicar`, { method: 'POST' });
+      const res = await adminFetch(`${API_URL}/api/admin/produtos/${id}/duplicar`, { method: 'POST' });
       const data = await res.json();
       if (data.success) { showToast('Produto duplicado!'); loadData('produtos'); }
     } catch { showToast('Erro ao duplicar'); }
   }, []);
 
   const handleDeleteProduto = useCallback(async (id) => {
-    if (!confirm('Deletar este produto?')) return;
-    await adminFetch(`${API}/api/admin/produtos/${id}`, { method: 'DELETE' });
-    showToast('Produto deletado');
-    loadData('produtos');
+    openConfirm('Deletar este produto?', async () => {
+      await adminFetch(`${API_URL}/api/admin/produtos/${id}`, { method: 'DELETE' });
+      showToast('Produto deletado');
+      loadData('produtos');
+    });
   }, []);
 
   // ── LOGIN SCREEN ──
@@ -924,7 +1054,7 @@ function AdminDashboard() {
 
               {!isCreating && (
                 <div className="editor-danger">
-                  <button onClick={() => { if(confirm('Deletar produto?')) { deleteProduto(editingProduct.id); closeEditor(); }}} className="editor-delete-btn"><Trash2 size={14} /> DELETAR PRODUTO</button>
+                  <button onClick={() => openConfirm('Deletar produto?', async () => { await adminFetch(`${API_URL}/api/admin/produtos/${editingProduct.id}`, { method: 'DELETE' }); showToast('Produto deletado'); closeEditor(); loadData('produtos'); })} className="editor-delete-btn"><Trash2 size={14} /> DELETAR PRODUTO</button>
                 </div>
               )}
             </div>
@@ -1017,10 +1147,6 @@ function AdminDashboard() {
             <label>INSTAGRAM</label>
             <input type="text" value={siteConfig.instagram || ''} onChange={(e) => setSiteConfig(prev => ({ ...prev, instagram: e.target.value }))} placeholder="@retrowavecamisas" />
           </div>
-          <div className="editor-field">
-            <label>WHATSAPP</label>
-            <input type="text" value={siteConfig.whatsapp || ''} onChange={(e) => setSiteConfig(prev => ({ ...prev, whatsapp: e.target.value }))} placeholder="5511999999999" />
-          </div>
         </div>
         <button className="config-save-btn" onClick={saveConfig} disabled={configSaving}>
           {configSaving ? 'SALVANDO...' : 'SALVAR CONFIGURAÇÕES'}
@@ -1059,6 +1185,21 @@ function AdminDashboard() {
       <AnimatePresence>
         {toast && (
           <motion.div className="admin-toast" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>{toast}</motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Confirm Modal */}
+      <AnimatePresence>
+        {confirmModal.open && (
+          <motion.div className="confirm-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeConfirm}>
+            <motion.div className="confirm-modal-box" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ duration: 0.2 }} onClick={e => e.stopPropagation()}>
+              <p className="confirm-modal-msg">{confirmModal.msg}</p>
+              <div className="confirm-modal-actions">
+                <button className="confirm-modal-cancel" onClick={closeConfirm}>CANCELAR</button>
+                <button className="confirm-modal-ok" onClick={() => { closeConfirm(); confirmModal.onConfirm?.(); }}>CONFIRMAR</button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -1378,6 +1519,96 @@ function AdminDashboard() {
                   </tr>
                 ))}
                 {avaliacoes.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUMA AVALIAÇÃO</td></tr>}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        )}
+
+        {/* NEWSLETTER TAB */}
+        {activeTab === 'newsletter' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: '0.75rem', letterSpacing: 3 }}><Mail size={14} /> NEWSLETTER — ENVIAR EMAIL EM MASSA</h3>
+              <button className={`action-btn ${aiOpen ? 'active-destaque' : ''}`} onClick={() => setAiOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.6rem' }}>
+                ✨ ASSISTENTE IA
+              </button>
+            </div>
+
+            {/* AI Assistant Panel */}
+            {aiOpen && (
+              <div className="admin-ai-panel" style={{ marginBottom: 20, border: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.6rem', letterSpacing: 2, fontWeight: 700 }}>✨ ASSISTENTE DE MARKETING IA</span>
+                  <button className="action-btn" onClick={() => { setAiMessages([]); setAiInput(''); }} style={{ fontSize: '0.55rem' }}>LIMPAR</button>
+                </div>
+                <div style={{ maxHeight: 280, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {aiMessages.length === 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {aiQuickPrompts.map((p, i) => (
+                        <button key={i} className="chat-quick-btn" style={{ fontSize: '0.55rem' }} onClick={() => sendAiMessage(p)}>{p}</button>
+                      ))}
+                    </div>
+                  )}
+                  {aiMessages.map((msg, i) => (
+                    <div key={i} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', padding: '8px 12px', borderRadius: 10, fontSize: '0.65rem', lineHeight: 1.5, background: msg.role === 'user' ? 'var(--text-color)' : 'rgba(255,255,255,0.06)', color: msg.role === 'user' ? 'var(--bg-color)' : 'var(--text-color)', whiteSpace: 'pre-wrap' }}>
+                      {msg.text}
+                      {msg.role === 'assistant' && (
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                          <button className="action-btn" style={{ fontSize: '0.5rem' }} onClick={() => {
+                            const clean = stripMarkdown(msg.text);
+                            const lines = clean.split('\n');
+                            const assuntoLine = lines.find(l => l.toLowerCase().includes('assunto'));
+                            if (assuntoLine) {
+                              setNlAssunto(assuntoLine.replace(/^.*?:\s*/, '').trim());
+                            } else {
+                              setNlAssunto(lines[0].trim());
+                            }
+                          }}>USAR ASSUNTO</button>
+                          <button className="action-btn" style={{ fontSize: '0.5rem' }} onClick={() => {
+                            const clean = stripMarkdown(msg.text);
+                            const lines = clean.split('\n');
+                            const conteudoIdx = lines.findIndex(l => l.toLowerCase().includes('conteúdo') || l.toLowerCase().includes('conteudo'));
+                            if (conteudoIdx >= 0) {
+                              setNlConteudo(lines.slice(conteudoIdx + 1).join('\n').trim());
+                            } else {
+                              setNlConteudo(clean);
+                            }
+                          }}>USAR COMO CONTEÚDO</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {aiLoading && <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>Gerando...</div>}
+                </div>
+                <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: 8 }}>
+                  <input placeholder="Peça ideias, textos, promoções..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendAiMessage(aiInput); }} style={{ flex: 1, background: 'var(--accent-color)', border: '1px solid var(--border-color)', color: 'var(--text-color)', padding: '8px 12px', fontSize: '0.65rem', borderRadius: 6 }} />
+                  <button className="action-btn" disabled={!aiInput.trim() || aiLoading} onClick={() => sendAiMessage(aiInput)}>ENVIAR</button>
+                </div>
+              </div>
+            )}
+
+            <form className="admin-form" onSubmit={enviarNewsletter} style={{ marginBottom: 24 }}>
+              <input placeholder="ASSUNTO DO EMAIL" value={nlAssunto} onChange={e => setNlAssunto(e.target.value)} required />
+              <textarea placeholder="CONTEÚDO DO EMAIL (texto simples, quebras de linha serão mantidas)" value={nlConteudo} onChange={e => setNlConteudo(e.target.value)} required style={{ minHeight: 120, resize: 'vertical', fontFamily: 'var(--font-family)', fontSize: '0.7rem', padding: '12px', background: 'var(--accent-color)', border: '1px solid var(--border-color)', color: 'var(--text-color)' }} />
+              <button type="submit" disabled={nlEnviando}>{nlEnviando ? 'ENVIANDO...' : `ENVIAR PARA ${nlSubscribers.filter(s => s.ativo).length} INSCRITO(S)`}</button>
+            </form>
+
+            <h4 style={{ marginBottom: 12, fontSize: '0.65rem', letterSpacing: 2, opacity: 0.5 }}>INSCRITOS ({nlSubscribers.length})</h4>
+            <div className="admin-table-wrapper">
+            <table className="admin-table">
+              <thead><tr><th>EMAIL</th><th>NOME</th><th>DATA</th><th>STATUS</th><th>AÇÕES</th></tr></thead>
+              <tbody>
+                {nlSubscribers.map(s => (
+                  <tr key={s.id}>
+                    <td>{s.email}</td>
+                    <td>{s.nome || '—'}</td>
+                    <td>{new Date(s.created_at).toLocaleDateString('pt-BR')}</td>
+                    <td><span className={s.ativo ? 'badge-ativo' : 'badge-inativo'}>{s.ativo ? 'ATIVO' : 'INATIVO'}</span></td>
+                    <td><button className="action-btn delete" onClick={() => deleteSubscriber(s.id)}>REMOVER</button></td>
+                  </tr>
+                ))}
+                {nlSubscribers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', opacity: 0.3, padding: '30px' }}>NENHUM INSCRITO</td></tr>}
               </tbody>
             </table>
             </div>
