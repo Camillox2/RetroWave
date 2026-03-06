@@ -1521,8 +1521,8 @@ button {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.88);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   z-index: 2000;
   display: flex;
   align-items: center;
@@ -1574,8 +1574,8 @@ button {
   position: relative;
   overflow: hidden;
   aspect-ratio: 3/4;
-  transform: translateZ(0);
 }
+
 
 .modal-image-section img {
   width: 100%;
@@ -5466,3 +5466,37 @@ button {
 }
 .btn-outline:hover:not(:disabled) { background: var(--text-color); color: var(--bg-color); }
 .btn-outline:disabled { opacity: 0.3; cursor: default; }
+
+/* ════════════════════════════════════════════════════════
+   ACCESSIBILITY — Reduced Motion
+   Disables 3D transforms and heavy animations for
+   users who prefer reduced motion / low-end hardware
+   ════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .product-card-3d {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
+
+  .modal-zoom-container.modal-3d {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
+
+  .product-modal-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .product-modal,
+  .modal-image-section,
+  .modal-details {
+    will-change: auto !important;
+  }
+
+  .product-item img {
+    transition: none !important;
+  }
+}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/index.jsx';
 import { API_URL } from '../config.js';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, ShoppingBag, ChevronLeft, ChevronRight, Pin, Percent, Heart, Share2, Star, Send, Copy, AlertTriangle, Camera } from 'lucide-react';
 
 // ═══════════════════════════════════════
@@ -164,6 +164,7 @@ function HeroBanner({ config, t }) {
 const SIZES = ['P', 'M', 'G', 'GG'];
 
 function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite, siteConfig, t }) {
+  const prefersReduced = useReducedMotion();
   const [selectedSize, setSelectedSize] = useState('M');
   const [extraImages, setExtraImages] = useState([]);
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
@@ -315,17 +316,35 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 
   return (
     <motion.div className="product-modal-overlay"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }} onClick={onClose}>
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: prefersReduced ? 0 : 0.15 }} onClick={onClose}>
       <motion.div className="product-modal"
-        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 15 }}
-        transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+        initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotateY: -90, rotateX: 12 }}
+        animate={prefersReduced ? { opacity: 1 } : { opacity: 1, scale: 1, rotateY: 0, rotateX: 0 }}
+        exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.85, rotateY: 30 }}
+        transition={prefersReduced ? { duration: 0.1 } : {
+          duration: 0.55,
+          ease: [0.16, 1, 0.3, 1],
+          exit: { duration: 0.2, ease: 'easeIn' }
+        }}
+        style={prefersReduced ? undefined : { perspective: 1200, transformStyle: 'preserve-3d', willChange: 'transform, opacity' }}
         onClick={(e) => e.stopPropagation()}>
 
-        <button className="modal-close" onClick={onClose}><X size={24} /></button>
+        <motion.button className="modal-close" onClick={onClose}
+          initial={prefersReduced ? false : { opacity: 0, scale: 0, rotate: -180 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={prefersReduced ? { duration: 0 } : { delay: 0.35, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        ><X size={24} /></motion.button>
 
-        {/* Image side */}
-        <div className="modal-image-section">
+        {/* Image side — Cinema Reveal */}
+        <motion.div className="modal-image-section"
+          initial={prefersReduced ? false : { opacity: 0, scale: 1.1, rotateY: 20 }}
+          animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+          transition={prefersReduced ? { duration: 0 } : { duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+          style={prefersReduced ? undefined : { transformStyle: 'preserve-3d', willChange: 'transform, opacity' }}
+        >
           {promoAtiva && <div className="modal-promo-badge">{t('home.promo')} {produto.promoLabel}{produto.promo_fim && <PromoCountdown fim={produto.promo_fim} />}</div>}
           {!!produto.destaque && <div className="modal-destaque-badge"><Pin size={12} /> {t('home.highlight')}</div>}
 
@@ -380,13 +399,24 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
 
-        {/* Details side */}
-        <div className="modal-details">
+        {/* Details side — Staggered entrance */}
+        <motion.div className="modal-details"
+          initial={prefersReduced ? false : { opacity: 0, x: 50, rotateY: -12 }}
+          animate={{ opacity: 1, x: 0, rotateY: 0 }}
+          transition={prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+          style={prefersReduced ? undefined : { transformStyle: 'preserve-3d', willChange: 'transform, opacity' }}
+        >
           <div>
-            <p className="modal-liga">{produto.liga}</p>
-            <h2 className="modal-nome">{produto.nome}</h2>
+            <motion.p className="modal-liga"
+              initial={prefersReduced ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.28, duration: 0.3 }}
+            >{produto.liga}</motion.p>
+            <motion.h2 className="modal-nome"
+              initial={prefersReduced ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.32, duration: 0.3 }}
+            >{produto.nome}</motion.h2>
 
             {avgRating && (
               <div className="modal-rating-summary">
@@ -395,6 +425,10 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
               </div>
             )}
 
+            <motion.div
+              initial={prefersReduced ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.36, duration: 0.25 }}
+            >
             {promoAtiva ? (
               <div className="modal-preco-container">
                 <span className="modal-preco-old">R$ {preco.toFixed(2)}</span>
@@ -403,6 +437,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             ) : (
               <p className="modal-preco">R$ {preco.toFixed(2)}</p>
             )}
+            </motion.div>
 
             {produto.descricao && <p className="modal-descricao">{produto.descricao}</p>}
 
@@ -434,11 +469,16 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
               </div>
             </div>
 
-            <button className="modal-add-btn" disabled={esgotado}
-              onClick={() => { if (!esgotado) { onAddToCart(produto, selectedSize); onClose(); } }}>
+            <motion.button className="modal-add-btn" disabled={esgotado}
+              onClick={() => { if (!esgotado) { onAddToCart(produto, selectedSize); onClose(); } }}
+              initial={prefersReduced ? false : { opacity: 0, y: 15, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={prefersReduced ? { duration: 0 } : { delay: 0.4, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              whileTap={{ scale: 0.97 }}
+            >
               <ShoppingBag size={16} />
               {esgotado ? t('home.sold_out') : `${t('home.add_to_cart')} — ${t('home.size').toUpperCase()} ${selectedSize}`}
-            </button>
+            </motion.button>
 
             {/* Share (C2) */}
             <div className="modal-share-row">
@@ -504,7 +544,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
     </motion.div>
   );
