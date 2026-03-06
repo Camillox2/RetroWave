@@ -28,7 +28,9 @@ const queries = [
   "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_subtitulo','')",
   "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_imagem','')",
   "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_link','')",
-  "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_ativo','0')"
+  "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_ativo','0')",
+  "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_animacao','flag')",
+  "INSERT IGNORE INTO site_config (chave, valor) VALUES ('banner_cintilante','1')"
 ];
 
 let i = 0;

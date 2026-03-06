@@ -136,7 +136,7 @@ function HeroBanner({ config, t }) {
   const hasBgImage = !!config.banner_imagem;
 
   return (
-    <div className="hero-banner">
+    <div className="hero-banner" data-anim={config.banner_animacao || 'flag'} data-shimmer={config.banner_cintilante || '1'}>
       {hasBgImage && <img src={`${API_URL}/api/banner-image`} alt="Banner" className="hero-banner-bg" loading="eager" />}
       <div className="hero-banner-overlay">
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}>
@@ -317,17 +317,17 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   return (
     <motion.div className="product-modal-overlay"
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: prefersReduced ? 0 : 0.15 }} onClick={onClose}>
+      animate={{ opacity: 1, pointerEvents: 'auto' }}
+      exit={{ opacity: 0, pointerEvents: 'none' }}
+      transition={{ duration: prefersReduced ? 0 : 0.12 }} onClick={onClose}>
       <motion.div className="product-modal"
         initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.6, rotateY: -90, rotateX: 12 }}
         animate={prefersReduced ? { opacity: 1 } : { opacity: 1, scale: 1, rotateY: 0, rotateX: 0 }}
-        exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.85, rotateY: 30 }}
+        exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.7, rotateY: 40 }}
         transition={prefersReduced ? { duration: 0.1 } : {
           duration: 0.55,
           ease: [0.16, 1, 0.3, 1],
-          exit: { duration: 0.2, ease: 'easeIn' }
+          exit: { duration: 0.12, ease: 'easeIn' }
         }}
         style={prefersReduced ? undefined : { perspective: 1200, transformStyle: 'preserve-3d', willChange: 'transform, opacity' }}
         onClick={(e) => e.stopPropagation()}>
@@ -744,9 +744,10 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
         })}
       </div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait" onExitComplete={() => {}}>
         {selectedProduct && (
           <ProductModal
+            key={selectedProduct.id}
             produto={selectedProduct}
             onClose={() => setSelectedProduct(null)}
             onAddToCart={addToCart}

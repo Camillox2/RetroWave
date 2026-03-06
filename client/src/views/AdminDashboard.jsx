@@ -1243,7 +1243,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
         {bannerPreview && (
           <motion.div className="banner-preview-container" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }}>
             <div className="editor-preview-label"><Eye size={12} /> PRÉVIA DO BANNER NO SITE</div>
-            <div className="banner-preview-card">
+            <div className="banner-preview-card" data-anim={siteConfig.banner_animacao || 'flag'}>
               {siteConfig.banner_imagem && <img src={siteConfig.banner_imagem} alt="Banner" className="banner-preview-bg" />}
               <div className="banner-preview-overlay">
                 <h2>{siteConfig.banner_titulo || 'TÍTULO DO BANNER'}</h2>
@@ -1285,6 +1285,38 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
               <label className="banner-upload-placeholder"><Upload size={24} /><span>ENVIAR IMAGEM</span><input type="file" accept="image/*" onChange={handleBannerImageUpload} hidden /></label>
             )}
           </div>
+        </div>
+
+        <div className="editor-field">
+          <label>ANIMAÇÃO DO BANNER</label>
+          <div className="banner-anim-grid">
+            {[
+              { id: 'flag', nome: 'BANDEIRA', desc: 'Ondulação como bandeira ao vento' },
+              { id: 'breathe', nome: 'RESPIRAÇÃO', desc: 'Pulsar suave com brilho' },
+              { id: 'drift', nome: 'DERIVA', desc: 'Panorâmica lenta e fluida' },
+              { id: 'cinematic', nome: 'CINEMÁTICO', desc: 'Zoom Ken Burns elegante' },
+              { id: 'glitch', nome: 'GLITCH', desc: 'Efeito retro com distorção' },
+              { id: 'none', nome: 'NENHUMA', desc: 'Sem animação' },
+            ].map(anim => (
+              <button
+                key={anim.id}
+                type="button"
+                className={`banner-anim-option ${(siteConfig.banner_animacao || 'flag') === anim.id ? 'active' : ''}`}
+                onClick={() => setSiteConfig(prev => ({ ...prev, banner_animacao: anim.id }))}
+              >
+                <div className="banner-anim-preview" data-anim={anim.id}>
+                  <div className="banner-anim-preview-bar" />
+                </div>
+                <span className="banner-anim-name">{anim.nome}</span>
+                <span className="banner-anim-desc">{anim.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="editor-toggle-row" onClick={() => setSiteConfig(prev => ({ ...prev, banner_cintilante: prev.banner_cintilante === '0' ? '1' : '0' }))}>
+          <div className={`editor-toggle ${(siteConfig.banner_cintilante || '1') !== '0' ? 'active' : ''}`}><div className="editor-toggle-knob" /></div>
+          <span>{(siteConfig.banner_cintilante || '1') !== '0' ? 'BRILHO CINTILANTE ATIVO — Efeito de luz ao passar o mouse' : 'BRILHO CINTILANTE DESATIVADO'}</span>
         </div>
 
         <button className="config-save-btn" onClick={saveConfig} disabled={configSaving}>
