@@ -1,0 +1,482 @@
+/* ═══════════════════════════════════════════════════════
+   RETRO WAVE — Responsive
+   ═══════════════════════════════════════════════════════ */
+
+/* Large desktops */
+@media (min-width: 1600px) {
+  .product-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .skeleton-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .product-grid,
+  .skeleton-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .header {
+    padding: 0 20px;
+  }
+
+  .filters {
+    gap: 14px;
+    font-size: 0.55rem;
+    max-width: 60vw;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile landscape / small tablets */
+@media (max-width: 768px) {
+  .product-grid,
+  .skeleton-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cart-drawer {
+    width: 100%;
+  }
+
+  .filters {
+    display: none;
+  }
+
+  .menu-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header {
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  .logo {
+    height: 28px;
+  }
+
+  .product-info {
+    padding: 16px;
+  }
+
+  .product-info h3 {
+    font-size: 0.7rem;
+  }
+
+  .product-info .liga-tag {
+    font-size: 0.5rem;
+  }
+
+  .product-info .preco {
+    font-size: 0.65rem;
+  }
+
+  .add-to-cart-btn {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    font-size: 0.55rem !important;
+    padding: 8px !important;
+  }
+
+  /* Modal responsivo */
+  .product-modal {
+    grid-template-columns: 1fr;
+    max-height: 100vh;
+    height: 100%;
+    max-width: 100%;
+  }
+
+  .product-modal-overlay {
+    padding: 0;
+  }
+
+  .modal-image-section {
+    aspect-ratio: 1/1;
+    max-height: 45vh;
+  }
+
+  .modal-details {
+    padding: 24px 20px 40px;
+    overflow-y: auto;
+  }
+
+  .modal-nome {
+    font-size: 1.1rem;
+  }
+
+  .modal-close {
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    background: rgba(0,0,0,0.4);
+    color: #fff;
+    border-radius: 50%;
+  }
+
+  .dashboard-container {
+    padding: 20px 16px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+  }
+
+  .metric-card {
+    padding: 20px;
+  }
+
+  .metric-value {
+    font-size: 1.2rem;
+  }
+
+  .checkout-page {
+    padding: 30px 16px 80px;
+  }
+
+  /* Meus Pedidos responsivo */
+  .pedidos-page {
+    padding: 24px 16px 80px;
+  }
+
+  .pedidos-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .pedido-card-header {
+    padding: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pedido-card-details {
+    padding: 0 16px 16px;
+  }
+
+  .tracking-bar {
+    padding: 0 16px 16px;
+  }
+
+  .tracking-step span {
+    font-size: 0.4rem;
+  }
+
+  .success-btn {
+    font-size: 0.5rem;
+    padding: 12px 16px;
+  }
+
+  .admin-table {
+    font-size: 0.6rem;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 10px 6px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .product-grid,
+  .skeleton-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    padding: 1px;
+  }
+
+  .product-item {
+    aspect-ratio: 3/4;
+  }
+
+  .header-actions {
+    gap: 12px;
+  }
+
+  .cart-drawer {
+    padding: 24px;
+  }
+
+  .mobile-menu {
+    width: 260px;
+    padding: 28px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Extra small phones */
+@media (max-width: 360px) {
+  .product-grid,
+  .skeleton-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .product-info {
+    padding: 12px;
+  }
+
+  .product-info h3 {
+    font-size: 0.6rem;
+  }
+}
+
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — New components
+   ═══════════════════════════════════════ */
+
+/* Toast - mobile */
+@media (max-width: 768px) {
+  .toast-container {
+    top: auto;
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+  }
+
+  .toast {
+    min-width: unset;
+    max-width: 100%;
+    padding: 14px 18px;
+    gap: 12px;
+  }
+
+  .toast-msg {
+    font-size: 0.55rem;
+    letter-spacing: 1.5px;
+  }
+}
+
+/* Search bar - mobile */
+@media (max-width: 768px) {
+  .search-bar-inner {
+    padding: 12px 16px;
+  }
+
+  .search-input {
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+  }
+
+  .search-bar {
+    top: 56px; /* mobile header height */
+  }
+}
+
+/* Size selector - mobile */
+@media (max-width: 480px) {
+  .size-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 0.55rem;
+  }
+
+  .size-options {
+    gap: 6px;
+  }
+}
+
+/* 404 page - mobile */
+@media (max-width: 480px) {
+  .not-found-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .not-found-divider {
+    width: 48px;
+    height: 1px;
+  }
+
+  .not-found-code {
+    font-size: 1.6rem;
+  }
+}
+
+/* Footer - responsive */
+@media (max-width: 768px) {
+  .site-footer {
+    padding: 32px 20px 28px;
+  }
+
+  .footer-links {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .footer-separator {
+    display: none;
+  }
+
+  .footer-lgpd {
+    font-size: 0.45rem;
+  }
+}
+
+/* Policy Modal - responsive */
+@media (max-width: 768px) {
+  .policy-modal-overlay {
+    padding: 0;
+  }
+
+  .policy-modal {
+    max-width: 100%;
+    max-height: 100vh;
+    height: 100%;
+  }
+
+  .policy-modal-header {
+    padding: 20px 20px 16px;
+  }
+
+  .policy-modal-body {
+    padding: 20px 20px 40px;
+  }
+
+  .policy-section h3 {
+    font-size: 0.55rem;
+  }
+
+  .policy-section p,
+  .policy-section ul li {
+    font-size: 0.63rem;
+  }
+}
+
+/* LGPD checkbox - mobile */
+@media (max-width: 480px) {
+  .lgpd-text {
+    font-size: 0.55rem;
+  }
+
+  .lgpd-checkmark {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* ── CHATBOT RESPONSIVE ── */
+@media (max-width: 768px) {
+  .chatbot-fab {
+    bottom: 18px;
+    right: 18px;
+    width: 48px;
+    height: 48px;
+  }
+
+  /* Fix: hide FAB X when chat is open on mobile — close is in header */
+  .chatbot-fab-active {
+    display: none !important;
+  }
+
+  .chatbot-window {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .chatbot-header {
+    padding: 14px 16px;
+  }
+
+  .chatbot-body {
+    padding: 14px 12px;
+  }
+
+  .chatbot-footer {
+    padding: 10px 12px 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 360px) {
+  .chat-msg-bubble {
+    font-size: 0.68rem;
+    padding: 8px 12px;
+  }
+
+  .chat-quick-btn {
+    font-size: 0.55rem;
+    padding: 6px 10px;
+  }
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — New Features
+   ═══════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Favorites always visible on mobile */
+  .card-fav-btn { opacity: 1; }
+
+  /* Charts stack */
+  .dashboard-charts { grid-template-columns: 1fr; }
+
+  /* Admin tabs scrollable on mobile */
+  .admin-tabs { gap: 16px; }
+  .admin-tab { font-size: 0.5rem; letter-spacing: 1.5px; padding: 10px 0; }
+
+  /* Period bar wrap */
+  .metrics-period-bar { gap: 4px; }
+  .period-btn { padding: 4px 8px; font-size: 0.42rem; }
+  .period-custom-inputs { margin-left: 0; margin-top: 4px; }
+
+  /* Batch bar */
+  .batch-action-bar { padding: 8px 10px; }
+
+  /* Cupom editor */
+  .cupom-editor { grid-template-columns: 1fr; }
+
+  /* Stock fields */
+  .stock-fields { grid-template-columns: repeat(2, 1fr); }
+
+  /* Export bar */
+  .export-bar { gap: 6px; }
+
+  /* Share row */
+  .modal-share-row { flex-wrap: wrap; }
+
+  /* Zoom disabled on mobile — use pinch zoom natively */
+  .modal-zoom-container { cursor: default; }
+  .modal-zoom-container.zoomed img { transform: none; }
+
+  /* Review form */
+  .modal-review-form { padding: 10px; }
+
+  /* Checkout cupom */
+  .checkout-cupom-input-wrap { flex-wrap: wrap; }
+  .checkout-cupom-btn { width: 100%; justify-content: center; text-align: center; }
+
+  /* WhatsApp btn */
+  .modal-whatsapp-btn { font-size: 0.5rem; padding: 10px 16px; }
+}
+
