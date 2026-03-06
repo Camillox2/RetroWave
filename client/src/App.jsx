@@ -245,8 +245,10 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [policyOpen, setPolicyOpen] = useState(false);
   const [forceReload, setForceReload] = useState(0);
+  const [filterLocked, setFilterLocked] = useState(false);
   const location = useLocation();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const ligas = [
     'BUNDESLIGA', 'LIGA PORTUGUESA', 'LIGUE 1', 'BRASILEIRÃO', 'SERIE A'
@@ -293,7 +295,7 @@ function AppContent() {
         setLigaAtiva(ligaParam);
       }
     }
-  }, []);
+  }, [searchParams, location.pathname]);
 
   // Bloquear scroll do body quando drawer está aberto
   useEffect(() => {
@@ -353,8 +355,37 @@ function AppContent() {
   const cartTotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal || item.preco) * item.qtd, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qtd, 0);
 
-  const [filterLocked, setFilterLocked] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
+  // Cart abandonment — save to backend when user has email and cart isn't empty
+  useEffect(() => {
+    if (!cliente?.email || cart.length === 0) return;
+    const timer = setTimeout(() => {
+      fetch('http://localhost:3001/api/carrinho-abandonado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cliente.email, carrinho: cart })
+      }).catch(() => {});
+    }, 5000); // Save after 5s of no changes
+    return () => clearTimeout(timer);
+  }, [cart, cliente?.email]);
+
+  // Recover abandoned cart on login
+  useEffect(() => {
+    if (!cliente?.email || cart.length > 0) return;
+    fetch(`http://localhost:3001/api/carrinho-abandonado?email=${encodeURIComponent(cliente.email)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.carrinho?.length > 0) {
+          setCart(data.carrinho);
+          toast.info(`Carrinho restaurado (${data.carrinho.length} itens)`);
+          fetch('http://localhost:3001/api/carrinho-abandonado/recuperar', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cliente.email })
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [cliente?.email]);
 
   const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes'];
   const adminTabAtiva = searchParams.get('tab') || 'dashboard';
@@ -474,7 +505,7 @@ function AppContent() {
       {/* ── ROUTES ── */}
       <main>
         <Routes location={location}>
-          <Route path="/" element={<Home ligaAtiva={ligaAtiva} addToCart={addToCart} searchQuery={searchQuery} forceReload={forceReload} />} />
+          <Route path="/" element={<Home ligaAtiva={ligaAtiva} addToCart={addToCart} searchQuery={searchQuery} forceReload={forceReload} cliente={cliente} />} />
           <Route path="/checkout" element={
             <Checkout cart={cart} setCart={setCart} onClienteLogin={handleClienteLogin} />
           } />

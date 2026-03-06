@@ -12,6 +12,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [pedidoId, setPedidoId] = useState(null);
+  const [errMsg, setErrMsg] = useState('');
 
   // Cupom (A6)
   const [cupomCode, setCupomCode] = useState('');
@@ -53,6 +54,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
     e.preventDefault();
     if (cart.length === 0) return;
     setEnviando(true);
+    setErrMsg('');
 
     try {
       const res = await fetch(`${API}/api/checkout`, {
@@ -62,6 +64,10 @@ function Checkout({ cart, setCart, onClienteLogin }) {
       });
 
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        setErrMsg(data.error || 'Erro ao processar pedido. Tente novamente.');
+        return;
+      }
       if (data.success) {
         setPedidoId(data.pedidoId);
         setSucesso(true);
@@ -77,7 +83,7 @@ function Checkout({ cart, setCart, onClienteLogin }) {
         if (onClienteLogin) onClienteLogin(clienteData);
       }
     } catch (err) {
-      console.error('Erro no checkout:', err);
+      setErrMsg('Erro de conexão. Verifique sua internet e tente novamente.');
     } finally {
       setEnviando(false);
     }
@@ -219,6 +225,12 @@ function Checkout({ cart, setCart, onClienteLogin }) {
                 </span>
               </label>
             </div>
+
+            {errMsg && (
+              <div style={{ color: '#ff4444', fontSize: '0.7rem', letterSpacing: '1px', padding: '8px 0', textAlign: 'center' }}>
+                {errMsg}
+              </div>
+            )}
 
             <button
               type="submit"

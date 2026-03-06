@@ -4,6 +4,7 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ═══════════════════════════════════════════════════════
@@ -43,6 +44,58 @@ setInterval(() => {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// ═══════════════════════════════════════════════════════
+// EMAIL — Nodemailer
+// ═══════════════════════════════════════════════════════
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER || '',
+    pass: process.env.EMAIL_PASS || ''
+  }
+});
+
+async function sendEmail(to, subject, html) {
+  const from = process.env.EMAIL_USER;
+  if (!from) return; // Email not configured — skip silently
+  try {
+    await emailTransporter.sendMail({ from: `"Retro Wave" <${from}>`, to, subject, html });
+  } catch (err) {
+    console.error('Email error:', err.message);
+  }
+}
+
+function buildOrderEmailHtml(pedidoId, nome, itens, total, status) {
+  const statusLabel = { concluido: 'Confirmado', preparando: 'Em preparação', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
+  const itemsHtml = itens.map(i =>
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${i.nome} (TAM ${i.tamanho}) × ${i.quantidade}</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #eee">R$ ${(parseFloat(i.preco_unitario) * i.quantidade).toFixed(2)}</td></tr>`
+  ).join('');
+  return `
+    <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;color:#111">
+      <div style="background:#111;color:#fff;padding:32px 24px;text-align:center">
+        <h1 style="margin:0;font-size:22px;letter-spacing:4px">RETRO WAVE</h1>
+      </div>
+      <div style="padding:32px 24px">
+        <h2 style="font-size:16px;letter-spacing:2px">Olá, ${nome || 'cliente'}!</h2>
+        <p style="color:#555">Seu pedido <strong>#${pedidoId}</strong> foi atualizado:</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;letter-spacing:1px">
+          STATUS: <strong>${statusLabel[status] || status.toUpperCase()}</strong>
+        </div>
+        ${itens.length > 0 ? `
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          ${itemsHtml}
+          <tr><td style="padding-top:12px;font-weight:bold">TOTAL</td><td style="text-align:right;font-weight:bold;padding-top:12px">R$ ${parseFloat(total).toFixed(2)}</td></tr>
+        </table>` : ''}
+      </div>
+      <div style="background:#f9f9f9;padding:20px 24px;text-align:center;font-size:12px;color:#888">
+        © 2026 DC Foundry Digital — By Vitor Camillo
+      </div>
+    </div>
+  `;
+}
 
 // ═══════════════════════════════════════════════════════
 // CONEXÃO COM O BANCO DE DADOS
@@ -112,6 +165,27 @@ db.query(`CREATE TABLE IF NOT EXISTS avaliacoes (
     aprovada TINYINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE CASCADE
+)`);
+
+// Wishlist persistente
+db.query(`CREATE TABLE IF NOT EXISTS wishlist (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    produto_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_prod (usuario_id, produto_id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE CASCADE
+)`);
+
+// Carrinho abandonado
+db.query(`CREATE TABLE IF NOT EXISTS carrinhos_abandonados (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    carrinho JSON NOT NULL,
+    recuperado TINYINT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )`);
 
 app.use((req, res, next) => {
@@ -333,9 +407,18 @@ app.post('/api/checkout', (req, res) => {
                 db.query('UPDATE produtos SET vendas = vendas + ? WHERE id = ?', [item.qtd || 1, item.id]);
             });
 
-            // Retornar dados do cliente para login persistente
+            // Retornar dados do cliente para login persistente + limpar carrinho abandonado
             db.query('SELECT id, email, nome, endereco FROM usuarios WHERE id = ?', [userId], (err, userRows) => {
                 const cliente = userRows && userRows[0] ? userRows[0] : { id: userId, email, nome, endereco };
+                // Limpar carrinho abandonado ao finalizar pedido
+                db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
+                // Enviar email de confirmação
+                const itensEmail = carrinho.map(i => ({
+                    nome: i.nome || `Produto #${i.id}`, tamanho: i.tamanho || 'M',
+                    quantidade: i.qtd || 1, preco_unitario: i.precoFinal || i.preco
+                }));
+                sendEmail(email, `Pedido #${pedidoId} — Retro Wave`,
+                    buildOrderEmailHtml(pedidoId, nome, itensEmail, totalNum, 'concluido'));
                 res.json({ success: true, pedidoId, cliente });
             });
         });
@@ -394,6 +477,94 @@ app.get('/api/cliente/perfil', (req, res) => {
         if (err) return res.status(500).json({ error: 'Erro' });
         if (results.length === 0) return res.status(404).json({ error: 'Cliente não encontrado' });
         res.json(results[0]);
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// WISHLIST PERSISTENTE
+// ═══════════════════════════════════════════════════════
+app.get('/api/cliente/wishlist', (req, res) => {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+    db.query(
+        `SELECT w.produto_id FROM wishlist w
+         JOIN usuarios u ON w.usuario_id = u.id
+         WHERE u.email = ?`,
+        [email],
+        (err, rows) => {
+            if (err) return res.status(500).json([]);
+            res.json(rows.map(r => r.produto_id));
+        }
+    );
+});
+
+app.post('/api/cliente/wishlist', (req, res) => {
+    const { email, produto_id } = req.body;
+    if (!email || !produto_id) return res.status(400).json({ error: 'Dados incompletos' });
+    db.query('SELECT id FROM usuarios WHERE email = ?', [email], (err, users) => {
+        if (err || !users.length) return res.status(404).json({ error: 'Cliente não encontrado' });
+        db.query('INSERT IGNORE INTO wishlist (usuario_id, produto_id) VALUES (?, ?)',
+            [users[0].id, produto_id],
+            (err2) => {
+                if (err2) return res.status(500).json({ error: 'Erro' });
+                res.json({ success: true });
+            });
+    });
+});
+
+app.delete('/api/cliente/wishlist', (req, res) => {
+    const { email, produto_id } = req.body;
+    if (!email || !produto_id) return res.status(400).json({ error: 'Dados incompletos' });
+    db.query('SELECT id FROM usuarios WHERE email = ?', [email], (err, users) => {
+        if (err || !users.length) return res.status(404).json({ error: 'Cliente não encontrado' });
+        db.query('DELETE FROM wishlist WHERE usuario_id = ? AND produto_id = ?',
+            [users[0].id, produto_id],
+            (err2) => {
+                if (err2) return res.status(500).json({ error: 'Erro' });
+                res.json({ success: true });
+            });
+    });
+});
+
+// ═══════════════════════════════════════════════════════
+// CARRINHO ABANDONADO
+// ═══════════════════════════════════════════════════════
+app.post('/api/carrinho-abandonado', (req, res) => {
+    const { email, carrinho } = req.body;
+    if (!email || !carrinho || carrinho.length === 0) return res.status(400).json({ error: 'Dados incompletos' });
+    db.query(
+        `INSERT INTO carrinhos_abandonados (email, carrinho) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE carrinho = VALUES(carrinho), recuperado = 0`,
+        [email, JSON.stringify(carrinho)],
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Erro' });
+            res.json({ success: true });
+        }
+    );
+});
+
+app.get('/api/carrinho-abandonado', (req, res) => {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+    db.query(
+        'SELECT carrinho, created_at FROM carrinhos_abandonados WHERE email = ? AND recuperado = 0 ORDER BY updated_at DESC LIMIT 1',
+        [email],
+        (err, rows) => {
+            if (err || !rows.length) return res.json({ carrinho: null });
+            try {
+                res.json({ carrinho: JSON.parse(rows[0].carrinho), created_at: rows[0].created_at });
+            } catch {
+                res.json({ carrinho: null });
+            }
+        }
+    );
+});
+
+app.put('/api/carrinho-abandonado/recuperar', (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+    db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email], () => {
+        res.json({ success: true });
     });
 });
 
@@ -780,6 +951,19 @@ app.put('/api/admin/pedidos/:id/status', (req, res) => {
     }
     db.query('UPDATE pedidos SET status = ? WHERE id = ?', [status, id], (err) => {
         if (err) return res.status(500).json({ error: 'Erro ao atualizar status' });
+        // Send email notification to customer
+        db.query(
+            `SELECT p.total, u.email, u.nome FROM pedidos p
+             JOIN usuarios u ON p.usuario_id = u.id WHERE p.id = ?`,
+            [id],
+            (err2, rows) => {
+                if (!err2 && rows.length > 0) {
+                    const { email, nome, total } = rows[0];
+                    sendEmail(email, `Atualização do Pedido #${id} — Retro Wave`,
+                        buildOrderEmailHtml(id, nome, [], total, status));
+                }
+            }
+        );
         res.json({ success: true });
     });
 });

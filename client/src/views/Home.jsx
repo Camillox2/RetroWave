@@ -382,7 +382,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 // ═══════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════
-function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0 }) {
+function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente = null }) {
   const [allProdutos, setAllProdutos] = useState(() => {
     try {
       const cached = sessionStorage.getItem(CACHE_KEY);
@@ -398,19 +398,46 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0 }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [siteConfig, setSiteConfig] = useState(null);
 
-  // Favorites (C1)
+  // Favorites (C1) — synced with backend when logged in
   const [favorites, setFavorites] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); } catch { return new Set(); }
   });
 
+  // Load wishlist from backend on login
+  useEffect(() => {
+    if (!cliente?.email) return;
+    fetch(`${API}/api/cliente/wishlist?email=${encodeURIComponent(cliente.email)}`)
+      .then(r => r.json())
+      .then(ids => {
+        if (Array.isArray(ids) && ids.length > 0) {
+          setFavorites(prev => {
+            const merged = new Set([...prev, ...ids]);
+            localStorage.setItem(FAV_KEY, JSON.stringify([...merged]));
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [cliente?.email]);
+
   const toggleFavorite = useCallback((id) => {
     setFavorites(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      const adding = !next.has(id);
+      adding ? next.add(id) : next.delete(id);
       localStorage.setItem(FAV_KEY, JSON.stringify([...next]));
+
+      // Sync with backend if logged in
+      if (cliente?.email) {
+        fetch(`${API}/api/cliente/wishlist`, {
+          method: adding ? 'POST' : 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cliente.email, produto_id: id })
+        }).catch(() => {});
+      }
       return next;
     });
-  }, []);
+  }, [cliente?.email]);
 
   // State transition
   const [phase, setPhase] = useState('visible');

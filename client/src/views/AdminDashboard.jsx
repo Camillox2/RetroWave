@@ -172,6 +172,31 @@ function exportCSV(data, filename, columns) {
   link.click();
 }
 
+// ═══════════════════════════════════════
+// PDF EXPORT
+// ═══════════════════════════════════════
+async function exportPDF(data, filename, columns, title) {
+  const { default: jsPDF } = await import('jspdf');
+  await import('jspdf-autotable');
+  const doc = new jsPDF('l', 'mm', 'a4');
+  doc.setFontSize(14);
+  doc.text(title || filename.toUpperCase(), 14, 18);
+  doc.setFontSize(8);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 24);
+  doc.autoTable({
+    startY: 30,
+    head: [columns.map(c => c.label)],
+    body: data.map(row => columns.map(c => {
+      const val = c.getter ? c.getter(row) : row[c.key];
+      return val !== null && val !== undefined ? String(val) : '';
+    })),
+    styles: { fontSize: 7, cellPadding: 2 },
+    headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+  });
+  doc.save(`${filename}_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
 function AdminDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!sessionStorage.getItem('rw_admin_token'));
   const [loginData, setLoginData] = useState({ usuario: '', senha: '' });
@@ -1081,7 +1106,7 @@ function AdminDashboard() {
               <div className="metric-card"><span className="metric-label">VISITANTES / CLIQUES</span><span className="metric-value">{displayStats.visitantes || displayStats.totalVisitantes || 0}</span><span className="metric-sub">{displayStats.cliques || displayStats.totalCliquesGeral || 0} cliques</span></div>
             </div>
 
-            {/* CSV Exports (A3) */}
+            {/* CSV & PDF Exports */}
             <div className="export-bar">
               <Download size={12} />
               <button onClick={() => exportCSV(pedidos, 'pedidos', [
@@ -1100,6 +1125,22 @@ function AdminDashboard() {
                 { label: 'Vendas', key: 'vendas' }, { label: 'Estoque P', key: 'estoque_p' }, { label: 'Estoque M', key: 'estoque_m' },
                 { label: 'Estoque G', key: 'estoque_g' }, { label: 'Estoque GG', key: 'estoque_gg' }
               ])}>PRODUTOS CSV</button>
+              <span style={{ opacity: 0.15 }}>|</span>
+              <button onClick={() => exportPDF(pedidos, 'pedidos', [
+                { label: 'ID', key: 'id' }, { label: 'Cliente', key: 'nome' }, { label: 'Email', key: 'email' },
+                { label: 'Total', getter: r => parseFloat(r.total).toFixed(2) }, { label: 'Status', key: 'status' },
+                { label: 'Data', getter: r => new Date(r.created_at).toLocaleDateString('pt-BR') }
+              ], 'RELATÓRIO DE PEDIDOS')}>PEDIDOS PDF</button>
+              <button onClick={() => exportPDF(despesas, 'despesas', [
+                { label: 'ID', key: 'id' }, { label: 'Descrição', key: 'descricao' },
+                { label: 'Valor', getter: r => parseFloat(r.valor).toFixed(2) },
+                { label: 'Data', getter: r => r.data_despesa ? new Date(r.data_despesa).toLocaleDateString('pt-BR') : '' }
+              ], 'RELATÓRIO DE DESPESAS')}>DESPESAS PDF</button>
+              <button onClick={() => exportPDF(produtos, 'produtos', [
+                { label: 'ID', key: 'id' }, { label: 'Nome', key: 'nome' }, { label: 'Liga', key: 'liga' },
+                { label: 'Preço', getter: r => parseFloat(r.preco).toFixed(2) }, { label: 'Cliques', key: 'cliques' },
+                { label: 'Vendas', key: 'vendas' }
+              ], 'RELATÓRIO DE PRODUTOS')}>PRODUTOS PDF</button>
             </div>
 
             {/* Charts (A2) */}
