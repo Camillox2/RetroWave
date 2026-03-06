@@ -77,37 +77,44 @@ function LazyImage({ src, alt, onClick }) {
 }
 
 // ═══════════════════════════════════════
-// PRODUCT CARD 3D — Pure CSS-variable driven (no re-renders)
+// PRODUCT CARD 3D — Listener no pai (sem flicker nas bordas)
 // ═══════════════════════════════════════
 function ProductCard3D({ children, onClick }) {
+  const wrapRef = useRef(null);
   const cardRef = useRef(null);
 
   const handleMouseMove = useCallback((e) => {
-    const el = cardRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;  // 0..1
-    const y = (e.clientY - rect.top) / rect.height;   // 0..1
-    el.style.setProperty('--rx', `${(y - 0.5) * -12}deg`);
-    el.style.setProperty('--ry', `${(x - 0.5) * 12}deg`);
+    const wrap = wrapRef.current;
+    const card = cardRef.current;
+    if (!wrap || !card) return;
+    const rect = wrap.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;   // 0..1
+    const y = (e.clientY - rect.top) / rect.height;    // 0..1
+    // Clamp para dead-zone nas bordas (evita saltos)
+    const cx = Math.max(0.05, Math.min(0.95, x));
+    const cy = Math.max(0.05, Math.min(0.95, y));
+    card.style.setProperty('--rx', `${(cy - 0.5) * -14}deg`);
+    card.style.setProperty('--ry', `${(cx - 0.5) * 14}deg`);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    el.style.setProperty('--rx', '0deg');
-    el.style.setProperty('--ry', '0deg');
+    const card = cardRef.current;
+    if (!card) return;
+    card.style.setProperty('--rx', '0deg');
+    card.style.setProperty('--ry', '0deg');
   }, []);
 
   return (
     <div
-      ref={cardRef}
-      className="product-card-3d"
+      ref={wrapRef}
+      className="product-card-3d-wrap"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
     >
-      {children}
+      <div ref={cardRef} className="product-card-3d">
+        {children}
+      </div>
     </div>
   );
 }
@@ -162,6 +169,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+  const modalWrapRef = useRef(null);
   const modalImgRef = useRef(null);
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -223,16 +231,20 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 
   // Zoom + 3D handlers (C6)
   const handleMouseMove = (e) => {
-    const el = modalImgRef.current;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const rect = (modalWrapRef.current || e.currentTarget).getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
 
     if (zoomed) {
-      setZoomPos({ x: (x / rect.width) * 100, y: (y / rect.height) * 100 });
-    } else if (el) {
-      el.style.setProperty('--rx', `${((y / rect.height) - 0.5) * -14}deg`);
-      el.style.setProperty('--ry', `${((x / rect.width) - 0.5) * 14}deg`);
+      setZoomPos({ x: x * 100, y: y * 100 });
+    } else {
+      const el = modalImgRef.current;
+      if (el) {
+        const cx = Math.max(0.05, Math.min(0.95, x));
+        const cy = Math.max(0.05, Math.min(0.95, y));
+        el.style.setProperty('--rx', `${(cy - 0.5) * -16}deg`);
+        el.style.setProperty('--ry', `${(cx - 0.5) * 16}deg`);
+      }
     }
   };
 
@@ -330,24 +342,29 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 
           {/* Zoom container + 3D effect */}
           <div
-            ref={modalImgRef}
-            className={`modal-zoom-container ${zoomed ? 'zoomed' : 'modal-3d'}`}
-            onClick={() => setZoomed(z => !z)}
+            ref={modalWrapRef}
+            className="modal-zoom-wrap"
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeaveModal}
-            style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : undefined}
+            onClick={() => setZoomed(z => !z)}
           >
-            <AnimatePresence mode="wait">
-              {allImages[currentImgIdx]?.startsWith('data:video/') ? (
-                <video key={currentImgIdx} src={allImages[currentImgIdx]}
-                  autoPlay loop muted playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-              ) : (
-                <motion.img key={currentImgIdx} src={allImages[currentImgIdx]} alt={produto.nome}
-                  initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.2 }} draggable={false} />
-              )}
-            </AnimatePresence>
+            <div
+              ref={modalImgRef}
+              className={`modal-zoom-container ${zoomed ? 'zoomed' : 'modal-3d'}`}
+              style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : undefined}
+            >
+              <AnimatePresence mode="wait">
+                {allImages[currentImgIdx]?.startsWith('data:video/') ? (
+                  <video key={currentImgIdx} src={allImages[currentImgIdx]}
+                    autoPlay loop muted playsInline
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                ) : (
+                  <motion.img key={currentImgIdx} src={allImages[currentImgIdx]} alt={produto.nome}
+                    initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+                    transition={{ duration: 0.2 }} draggable={false} />
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {allImages.length > 1 && (

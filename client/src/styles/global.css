@@ -282,13 +282,21 @@ button {
 /* ═══════════════════════════════════════
    PRODUCT CARD 3D — CSS-variable driven
    ═══════════════════════════════════════ */
+
+/* Wrap: captura o mouse (não rota, não pisca) */
+.product-card-3d-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+/* Card: rota suavemente */
 .product-card-3d {
   --rx: 0deg;
   --ry: 0deg;
   position: absolute;
   inset: 0;
   transform: perspective(800px) rotateX(var(--rx)) rotateY(var(--ry));
-  transition: transform 0.45s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+  transition: transform 0.5s cubic-bezier(0.03, 0.98, 0.52, 0.99);
   will-change: transform;
 }
 
@@ -4611,7 +4619,9 @@ button {
 }
 
 /* ── Zoom + 3D Effect (C6) ── */
-.modal-zoom-container {
+
+/* Wrap: captura mouse (não rota) */
+.modal-zoom-wrap {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -4621,11 +4631,19 @@ button {
   justify-content: center;
 }
 
+.modal-zoom-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .modal-zoom-container.modal-3d {
   --rx: 0deg;
   --ry: 0deg;
   transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
-  transition: transform 0.45s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+  transition: transform 0.5s cubic-bezier(0.03, 0.98, 0.52, 0.99);
   will-change: transform;
 }
 
@@ -4637,7 +4655,7 @@ button {
   transform-origin: var(--zoom-x, 50%) var(--zoom-y, 50%);
 }
 
-.modal-zoom-container.zoomed {
+.modal-zoom-wrap:has(.zoomed) {
   cursor: zoom-out;
 }
 
