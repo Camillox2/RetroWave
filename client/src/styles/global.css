@@ -270,7 +270,7 @@ button {
   background-color: var(--card-bg);
   position: relative;
   aspect-ratio: 3/4;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -279,6 +279,69 @@ button {
   content-visibility: auto;
   contain-intrinsic-size: auto 300px;
   transform: translateZ(0);
+}
+
+/* ═══════════════════════════════════════
+   PRODUCT CARD 3D — Mouse Tracking Effect
+   ═══════════════════════════════════════ */
+.product-card-3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  overflow: hidden;
+  border-radius: 2px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Glass shelf effect — Glassmorphism prateleira (invisível na home) */
+.glass-shelf {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+  backface-visibility: hidden;
+}
+
+@media (prefers-color-scheme: light) {
+  .glass-shelf {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      rgba(255, 255, 255, 0.3) 100%
+    );
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+/* Only apply 3D effect on desktop */
+@media (hover: hover) and (pointer: fine) {
+  .product-card-3d:hover .glass-shelf {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+  }
+}
+
+/* Disable 3D on mobile/tablet */
+@media (hover: none) or (pointer: coarse) {
+  .product-card-3d {
+    transform: none !important;
+  }
+
+  .glass-shelf {
+    opacity: 0.5;
+  }
 }
 
 /* Quando o grid está saindo: cards deslizam pra baixo e somem */
@@ -316,6 +379,17 @@ button {
   inset: 0;
   overflow: hidden;
   background: var(--card-bg);
+  z-index: 0;
+}
+
+/* Image inside 3D card */
+.product-card-3d .lazy-img-wrap img {
+  transform: translateZ(20px) scale(1);
+  transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.product-card-3d:hover .lazy-img-wrap img {
+  transform: translateZ(20px) scale(1.05);
 }
 
 /* Shimmer placeholder estilo Instagram */
@@ -384,12 +458,13 @@ button {
   height: 60%;
   background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 100%);
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
+  transform: translateZ(25px);
 }
 
 .product-info {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   padding: 25px;
   color: #ffffff;
   text-transform: uppercase;
@@ -1259,7 +1334,7 @@ button {
   font-weight: 600;
   letter-spacing: 2px;
   text-transform: uppercase;
-  opacity: 0.5;
+  opacity: 0.85;
 }
 
 .metric-value {
@@ -1270,7 +1345,7 @@ button {
 
 .metric-sub {
   font-size: 0.6rem;
-  opacity: 0.4;
+  opacity: 0.7;
   letter-spacing: 1px;
 }
 
@@ -1285,7 +1360,7 @@ button {
   letter-spacing: 3px;
   text-transform: uppercase;
   margin-bottom: 16px;
-  opacity: 0.5;
+  opacity: 0.85;
 }
 
 .ranking-item {
@@ -1300,7 +1375,7 @@ button {
 .ranking-item .rank {
   width: 24px;
   font-weight: 700;
-  opacity: 0.3;
+  opacity: 0.6;
 }
 
 .ranking-item .name {
@@ -1313,7 +1388,7 @@ button {
   font-weight: 600;
   font-size: 0.65rem;
   letter-spacing: 1px;
-  opacity: 0.6;
+  opacity: 0.9;
 }
 
 /* Dashboard two-column */
@@ -3688,14 +3763,14 @@ button {
 
 .produto-card-badge {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
+  top: 8px;
+  left: 8px;
   font-size: 0.45rem;
   letter-spacing: 1px;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0.65);
   padding: 2px 6px;
   border-radius: 2px;
-  opacity: 0.6;
+  opacity: 0.9;
   font-weight: 500;
   z-index: 1;
 }
@@ -3703,7 +3778,7 @@ button {
 .produto-card-liga {
   font-size: 0.45rem;
   letter-spacing: 2.5px;
-  opacity: 0.35;
+  opacity: 0.7;
   font-weight: 600;
   display: block;
   margin-bottom: 4px;
@@ -3739,7 +3814,7 @@ button {
   gap: 14px;
   font-size: 0.5rem;
   letter-spacing: 1px;
-  opacity: 0.3;
+  opacity: 0.65;
   font-weight: 500;
 }
 
@@ -3760,7 +3835,7 @@ button {
   cursor: pointer;
   padding: 5px 10px;
   border-radius: 2px;
-  opacity: 0.4;
+  opacity: 0.75;
   transition: opacity 0.2s, border-color 0.2s, color 0.2s;
 }
 
@@ -5077,7 +5152,7 @@ button {
   font-size: 0.55rem;
   font-weight: 400;
   letter-spacing: 2.5px;
-  opacity: 0.4;
+  opacity: 0.85;
   margin-bottom: 12px;
 }
 

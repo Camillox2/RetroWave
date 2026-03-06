@@ -456,12 +456,17 @@ function AdminDashboard() {
 
   // ── PRODUCT EDITOR ──
   const openProductEditor = async (produtoId) => {
+    // Abre imediatamente com dados em cache (sem delay)
+    const cached = produtos.find(p => p.id === produtoId);
+    if (cached) {
+      setEditingProduct({ ...cached, imagens: [], _imageChanged: false, _loading: true });
+      setIsCreating(false);
+      setShowPreview(false);
+    }
     try {
       const res = await adminFetch(`${API_URL}/api/admin/produtos/${produtoId}`);
       const data = await res.json();
-      setEditingProduct({ ...data, _imageChanged: false });
-      setIsCreating(false);
-      setShowPreview(false);
+      setEditingProduct({ ...data, _imageChanged: false, _loading: false });
     } catch {
       showToast('Erro ao carregar produto');
     }
@@ -485,7 +490,18 @@ function AdminDashboard() {
     if (!files.length) return;
 
     for (const file of files) {
-      const base64 = await compressImage(file, 1200, 0.78);
+      const isVideo = file.type.startsWith('video/');
+      let base64;
+      if (isVideo) {
+        // Vídeos são lidos diretamente como base64 (sem compressão)
+        base64 = await new Promise(res => {
+          const reader = new FileReader();
+          reader.onload = ev => res(ev.target.result);
+          reader.readAsDataURL(file);
+        });
+      } else {
+        base64 = await compressImage(file, 1200, 0.78);
+      }
       if (isMain) {
         setEditingProduct(prev => ({ ...prev, imagem: base64, _imageChanged: true }));
       } else if (isCreating) {
@@ -550,10 +566,20 @@ function AdminDashboard() {
   const handleFileDrop = async (e) => {
     e.preventDefault();
     setIsDraggingFiles(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
     if (!files.length) return;
     for (const file of files) {
-      const base64 = await compressImage(file, 1200, 0.78);
+      const isVideo = file.type.startsWith('video/');
+      let base64;
+      if (isVideo) {
+        base64 = await new Promise(res => {
+          const reader = new FileReader();
+          reader.onload = ev => res(ev.target.result);
+          reader.readAsDataURL(file);
+        });
+      } else {
+        base64 = await compressImage(file, 1200, 0.78);
+      }
       if (isCreating) {
         setEditingProduct(prev => ({
           ...prev,
@@ -1049,10 +1075,10 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
               </div>
 
               <div className="editor-extras-header">
-                <h3>GALERIA ({editingProduct.imagens.length} fotos)</h3>
+                <h3>GALERIA ({editingProduct.imagens.length} mídias)</h3>
                 <label className="editor-add-img-btn">
                   <Plus size={14} /><span>ADICIONAR</span>
-                  <input type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, false)} hidden />
+                  <input type="file" accept="image/*,video/*" multiple onChange={(e) => handleImageUpload(e, false)} hidden />
                 </label>
               </div>
 
@@ -1066,11 +1092,11 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                 {isDraggingFiles && (
                   <div className="editor-drop-overlay">
                     <Upload size={24} />
-                    <span>SOLTAR IMAGENS AQUI</span>
+                    <span>SOLTAR IMAGENS / VÍDEOS AQUI</span>
                   </div>
                 )}
                 {editingProduct.imagens.length === 0 && !isDraggingFiles && (
-                  <div className="editor-no-images">Arraste imagens aqui ou clique em Adicionar.</div>
+                  <div className="editor-no-images">Arraste imagens ou vídeos aqui ou clique em Adicionar.</div>
                 )}
                 {editingProduct.imagens.map((img, i) => (
                   <div
@@ -1084,7 +1110,11 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                   >
                     <span className="editor-gallery-grip"><GripVertical size={14} /></span>
                     <span className="editor-gallery-order">{i + 1}</span>
-                    <img src={img.imagem} alt={`Foto ${i + 1}`} />
+                    {img.imagem?.startsWith('data:video/') || img.imagem?.includes('/api/imagens/') && img._tipo === 'video' ? (
+                      <video src={img.imagem} muted style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 2 }} />
+                    ) : (
+                      <img src={img.imagem} alt={`Mídia ${i + 1}`} />
+                    )}
                     <div className="editor-gallery-actions">
                       <button title="Definir como principal" onClick={() => setAsMainImage(img.imagem)}><Star size={14} /></button>
                       <button title="Remover" className="editor-gallery-delete" onClick={() => deleteExtraImage(img.id, img._local)}><Trash2 size={14} /></button>
@@ -1132,8 +1162,8 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                 {['P', 'M', 'G', 'GG'].map(tam => (
                   <div className="editor-field" key={tam}>
                     <label>TAM {tam}</label>
-                    <input type="number" min={0} value={editingProduct[`estoque_${tam.toLowerCase()}`] ?? 0}
-                      onChange={(e) => setEditingProduct(prev => ({ ...prev, [`estoque_${tam.toLowerCase()}`]: parseInt(e.target.value) || 0 }))} />
+                    <input type="number" min={0} value={Math.max(0, editingProduct[`estoque_${tam.toLowerCase()}`] ?? 0)}
+                      onChange={(e) => setEditingProduct(prev => ({ ...prev, [`estoque_${tam.toLowerCase()}`]: Math.max(0, parseInt(e.target.value) || 0) }))} />
                   </div>
                 ))}
               </div>
@@ -1495,7 +1525,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                       <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
                       <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="visitantes" fill="rgba(255,255,255,0.25)" name="Visitantes" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="visitantes" fill="rgba(99,179,237,0.85)" name="Visitantes" radius={[3, 3, 0, 0]} />
                       <Bar dataKey="pedidos" fill="#fff" name="Pedidos" radius={[3, 3, 0, 0]} />
                     </RChart>
                   </ResponsiveContainer>

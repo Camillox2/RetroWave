@@ -76,6 +76,66 @@ function LazyImage({ src, alt, onClick }) {
   );
 }
 
+// ═══════════════════════════════════════
+// PRODUCT CARD 3D — Mouse Tracking + Glassmorphism (Optimized)
+// ═══════════════════════════════════════
+function ProductCard3D({ children, onClick }) {
+  const cardRef = useRef(null);
+  const [transform, setTransform] = useState({ rotateX: 0, rotateY: 0 });
+  const rafRef = useRef(null);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!cardRef.current) return;
+
+    // Cancelar animação anterior para evitar bugs
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    rafRef.current = requestAnimationFrame(() => {
+      const card = cardRef.current;
+      if (!card) return;
+
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+
+      // Reduzir para 5 graus (mais suave, menos bug)
+      const rotateX = ((y - centerY) / centerY) * -5;
+      const rotateY = ((x - centerX) / centerX) * 5;
+
+      setTransform({ rotateX, rotateY });
+    });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    setTransform({ rotateX: 0, rotateY: 0 });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={cardRef}
+      className="product-card-3d"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={onClick}
+      style={{
+        transform: `rotateX(${transform.rotateX}deg) rotateY(${transform.rotateY}deg)`,
+      }}
+    >
+      <div className="glass-shelf" />
+      {children}
+    </div>
+  );
+}
+
 function SkeletonGrid() {
   return (
     <div className="skeleton-grid">
@@ -285,9 +345,15 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : {}}
           >
             <AnimatePresence mode="wait">
-              <motion.img key={currentImgIdx} src={allImages[currentImgIdx]} alt={produto.nome}
-                initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-                transition={{ duration: 0.2 }} draggable={false} />
+              {allImages[currentImgIdx]?.startsWith('data:video/') ? (
+                <video key={currentImgIdx} src={allImages[currentImgIdx]}
+                  autoPlay loop muted playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+              ) : (
+                <motion.img key={currentImgIdx} src={allImages[currentImgIdx]} alt={produto.nome}
+                  initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+                  transition={{ duration: 0.2 }} draggable={false} />
+              )}
             </AnimatePresence>
           </div>
 
@@ -580,10 +646,10 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
           return (
             <div key={produto.id}
               className={`product-item ${produto.destaque ? 'item-destaque' : ''} ${allSizesOut ? 'item-esgotado' : ''}`}
-              style={{ '--i': Math.min(index, 11) }}
-              onClick={() => handleClique(produto)}>
+              style={{ '--i': Math.min(index, 11) }}>
 
-              <LazyImage src={`${API_URL}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
+              <ProductCard3D onClick={() => handleClique(produto)}>
+                <LazyImage src={`${API_URL}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
 
               {/* Badges */}
               {promoAtiva && (
@@ -622,6 +688,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
                   {allSizesOut ? t('home.sold_out') : t('home.add_to_cart')}
                 </button>
               </div>
+              </ProductCard3D>
             </div>
           );
         })}
