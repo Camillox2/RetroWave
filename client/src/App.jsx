@@ -285,6 +285,16 @@ function AppContent() {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
+  // Ler liga do URL param ao carregar (para links compartilháveis)
+  useEffect(() => {
+    if (location.pathname === '/') {
+      const ligaParam = searchParams.get('liga');
+      if (ligaParam && ligas.includes(ligaParam)) {
+        setLigaAtiva(ligaParam);
+      }
+    }
+  }, []);
+
   // Bloquear scroll do body quando drawer está aberto
   useEffect(() => {
     if (isCartOpen || isMobileMenuOpen) {
@@ -352,7 +362,11 @@ function AppContent() {
   const handleFilterClick = (liga) => {
     if (filterLocked) return;
     setFilterLocked(true);
-    setLigaAtiva(liga === ligaAtiva ? '' : liga);
+    const newLiga = liga === ligaAtiva ? '' : liga;
+    setLigaAtiva(newLiga);
+    if (location.pathname === '/') {
+      setSearchParams(newLiga ? { liga: newLiga } : {});
+    }
     setIsMobileMenuOpen(false);
     setTimeout(() => setFilterLocked(false), 800);
   };

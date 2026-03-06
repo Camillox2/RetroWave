@@ -231,6 +231,7 @@ function AdminDashboard() {
   // Drag-and-drop (A7)
   const dragItem = useRef(null);
   const dragOver = useRef(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -295,7 +296,7 @@ function AdminDashboard() {
     if (tab === 'dashboard' || tab === 'produtos') {
       if (force || !loaded.produtos) {
         setProdutosLoading(true);
-        adminFetch(`${API}/api/admin/produtos`).then(r => r.json()).then(d => { setProdutos(d); setProdutosLoading(false); loaded.produtos = true; }).catch(() => setProdutosLoading(false));
+        adminFetch(`${API}/api/admin/produtos?limit=500`).then(r => r.json()).then(d => { setProdutos(d.produtos || d); setProdutosLoading(false); loaded.produtos = true; }).catch(() => setProdutosLoading(false));
       }
     }
     if (tab === 'despesas' || tab === 'dashboard') {
@@ -420,6 +421,39 @@ function AdminDashboard() {
   const setAsMainImage = (imgBase64) => {
     setEditingProduct(prev => ({ ...prev, imagem: imgBase64 }));
     showToast('Imagem principal atualizada');
+  };
+
+  // Drag-drop file upload handler
+  const handleFileDrop = async (e) => {
+    e.preventDefault();
+    setIsDraggingFiles(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    for (const file of files) {
+      const base64 = await compressImage(file, 1200, 0.78);
+      if (isCreating) {
+        setEditingProduct(prev => ({
+          ...prev,
+          imagens: [...prev.imagens, { id: Date.now() + Math.random(), imagem: base64, ordem: prev.imagens.length, _local: true }]
+        }));
+      } else {
+        try {
+          const res = await adminFetch(`${API}/api/admin/produtos/${editingProduct.id}/imagens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imagem: base64 })
+          });
+          const data = await res.json();
+          setEditingProduct(prev => ({
+            ...prev,
+            imagens: [...prev.imagens, { id: data.id, imagem: base64, ordem: data.ordem }]
+          }));
+        } catch {
+          showToast('Erro ao enviar imagem');
+        }
+      }
+    }
+    showToast(`${files.length} imagem(ns) adicionada(s)`);
   };
 
   const saveProduct = async () => {
@@ -737,9 +771,20 @@ function AdminDashboard() {
               </div>
 
               {/* Drag-and-drop gallery (A7) */}
-              <div className="editor-gallery">
-                {editingProduct.imagens.length === 0 && (
-                  <div className="editor-no-images">Nenhuma foto extra. Arraste para reordenar.</div>
+              <div
+                className={`editor-gallery ${isDraggingFiles ? 'editor-gallery-dropzone' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer.types.includes('Files')) setIsDraggingFiles(true); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDraggingFiles(false); }}
+                onDrop={handleFileDrop}
+              >
+                {isDraggingFiles && (
+                  <div className="editor-drop-overlay">
+                    <Upload size={24} />
+                    <span>SOLTAR IMAGENS AQUI</span>
+                  </div>
+                )}
+                {editingProduct.imagens.length === 0 && !isDraggingFiles && (
+                  <div className="editor-no-images">Arraste imagens aqui ou clique em Adicionar.</div>
                 )}
                 {editingProduct.imagens.map((img, i) => (
                   <div
