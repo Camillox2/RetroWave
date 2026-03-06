@@ -128,6 +128,76 @@ function SkeletonGrid() {
 }
 
 // ═══════════════════════════════════════
+// BANNER SPARKLE CANVAS
+// ═══════════════════════════════════════
+function BannerSparkle({ speed = 'medium' }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const speedMap = { slow: 0.003, medium: 0.007, fast: 0.016 };
+    const spd = speedMap[speed] || 0.007;
+
+    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const perimeterPoint = (t, w, h) => {
+      const perim = 2 * (w + h);
+      const d = t * perim;
+      if (d < w)         return { x: d, y: 0 };
+      if (d < w + h)     return { x: w, y: d - w };
+      if (d < 2 * w + h) return { x: w - (d - w - h), y: h };
+      return { x: 0, y: h - (d - 2 * w - h) };
+    };
+
+    const COMETS = 2;
+    const offsets = Array.from({ length: COMETS }, (_, i) => i / COMETS);
+    let t = 0;
+    let raf;
+
+    const draw = () => {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      offsets.forEach(offset => {
+        const ct = (t + offset) % 1;
+        const tailLen = 0.12;
+        const STEPS = 60;
+        for (let i = 0; i < STEPS; i++) {
+          const ft = (ct - (i / STEPS) * tailLen + 1) % 1;
+          const { x, y } = perimeterPoint(ft, w, h);
+          const alpha = (1 - i / STEPS) * 0.9;
+          const radius = (1 - i / STEPS) * 3.5 + 0.5;
+          const r = Math.round(120 + (255 - 120) * (1 - i / STEPS));
+          const g = Math.round(60  + (255 -  60) * (1 - i / STEPS));
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},255,${alpha})`;
+          ctx.fill();
+        }
+        const { x: hx, y: hy } = perimeterPoint(ct, w, h);
+        const grd = ctx.createRadialGradient(hx, hy, 0, hx, hy, 18);
+        grd.addColorStop(0, 'rgba(255,255,255,1)');
+        grd.addColorStop(0.3, 'rgba(180,120,255,0.8)');
+        grd.addColorStop(1, 'rgba(80,40,200,0)');
+        ctx.beginPath();
+        ctx.arc(hx, hy, 18, 0, Math.PI * 2);
+        ctx.fillStyle = grd;
+        ctx.fill();
+      });
+
+      t = (t + spd) % 1;
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, [speed]);
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3 }} />;
+}
+
+// ═══════════════════════════════════════
 // HERO BANNER
 // ═══════════════════════════════════════
 function HeroBanner({ config, t }) {
@@ -136,8 +206,12 @@ function HeroBanner({ config, t }) {
   const hasBgImage = !!config.banner_imagem;
 
   return (
-    <div className="hero-banner" data-anim={config.banner_animacao || 'flag'} data-shimmer={config.banner_cintilante || '1'}>
+    <div className="hero-banner" data-anim={config.banner_animacao || 'flag'} data-shimmer={config.banner_cintilante || '1'}
+      style={{ '--speed-mul': { slow: 2.5, medium: 1, fast: 0.38 }[config.banner_sparkle_speed || 'medium'] }}>
       {hasBgImage && <img src={`${API_URL}/api/banner-image`} alt="Banner" className="hero-banner-bg" loading="eager" />}
+      {(config.banner_cintilante || '1') !== '0' && (
+        <BannerSparkle speed={config.banner_sparkle_speed || 'medium'} />
+      )}
       <div className="hero-banner-overlay">
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}>
           {config.banner_titulo || 'RETRO WAVE'}

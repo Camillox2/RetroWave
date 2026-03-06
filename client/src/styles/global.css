@@ -3935,22 +3935,22 @@ button {
   transform-origin: center center;
 }
 
-/* Default: flag */
+/* Default: flag — duração controlada por --speed-mul (slow=2.5, medium=1, fast=0.38) */
 .hero-banner[data-anim="flag"] .hero-banner-bg,
 .hero-banner:not([data-anim]) .hero-banner-bg {
-  animation: bannerFlag 4s ease-in-out infinite;
+  animation: bannerFlag calc(4s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .hero-banner[data-anim="breathe"] .hero-banner-bg {
-  animation: bannerBreathe 5s ease-in-out infinite;
+  animation: bannerBreathe calc(5s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .hero-banner[data-anim="drift"] .hero-banner-bg {
-  animation: bannerDrift 12s ease-in-out infinite;
+  animation: bannerDrift calc(12s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .hero-banner[data-anim="cinematic"] .hero-banner-bg {
-  animation: bannerCinematic 10s ease-in-out infinite;
+  animation: bannerCinematic calc(10s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .hero-banner[data-anim="glitch"] .hero-banner-bg {
-  animation: bannerGlitch 4s steps(1) infinite;
+  animation: bannerGlitch calc(4s * var(--speed-mul, 1)) steps(1) infinite;
 }
 
 /* Brilho cintilante no banner — aparece no hover */
@@ -4596,19 +4596,19 @@ button {
 /* Preview animations match hero-banner */
 .banner-preview-card[data-anim="flag"] .banner-preview-bg,
 .banner-preview-card:not([data-anim]) .banner-preview-bg {
-  animation: bannerFlag 4s ease-in-out infinite;
+  animation: bannerFlag calc(4s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .banner-preview-card[data-anim="breathe"] .banner-preview-bg {
-  animation: bannerBreathe 5s ease-in-out infinite;
+  animation: bannerBreathe calc(5s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .banner-preview-card[data-anim="drift"] .banner-preview-bg {
-  animation: bannerDrift 12s ease-in-out infinite;
+  animation: bannerDrift calc(12s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .banner-preview-card[data-anim="cinematic"] .banner-preview-bg {
-  animation: bannerCinematic 10s ease-in-out infinite;
+  animation: bannerCinematic calc(10s * var(--speed-mul, 1)) ease-in-out infinite;
 }
 .banner-preview-card[data-anim="glitch"] .banner-preview-bg {
-  animation: bannerGlitch 4s steps(1) infinite;
+  animation: bannerGlitch calc(4s * var(--speed-mul, 1)) steps(1) infinite;
 }
 .banner-preview-card[data-anim="none"] .banner-preview-bg {
   animation: none;
@@ -4648,6 +4648,115 @@ button {
   font-size: 0.45rem;
   letter-spacing: 2px;
   font-weight: 500;
+}
+
+/* ── Banner Layout Grid (2 colunas) ── */
+.banner-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+.banner-layout-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.banner-layout-right {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Preview ocupa toda a largura da coluna esquerda */
+.banner-layout-left .banner-preview-card {
+  max-width: 100%;
+  height: 200px;
+}
+
+/* Seção sparkle */
+.banner-sparkle-section {
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  padding: 14px;
+  background: rgba(255,255,255,0.02);
+}
+
+.banner-sparkle-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.banner-sparkle-header .editor-toggle {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.banner-sparkle-desc {
+  font-size: 0.5rem;
+  opacity: 0.5;
+  letter-spacing: 0.5px;
+  margin-bottom: 0;
+}
+
+/* Speed selector */
+.banner-speed-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.banner-speed-option {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 8px 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-color);
+  font-family: inherit;
+  font-size: 0.48rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.banner-speed-option:hover {
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+}
+
+.banner-speed-option.active {
+  border-color: rgba(138,43,226,0.6);
+  background: rgba(138,43,226,0.12);
+  box-shadow: 0 0 10px rgba(138,43,226,0.15);
+}
+
+.banner-speed-dots {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  color: rgba(200,170,255,0.9);
+}
+
+@media (max-width: 900px) {
+  .banner-layout-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Banner Animation Selector Grid ── */
