@@ -1839,32 +1839,34 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
               <div className="dashboard-charts">
                 <div className="chart-card">
                   <h4>RECEITA — ÚLTIMOS 30 DIAS</h4>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="gradReceita" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#fff" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#fff" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.5} />
+                          <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
-                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} interval={4} />
+                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} width={40} tickFormatter={v => `R$${v}`} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Area type="monotone" dataKey="receita" stroke="#fff" fill="url(#gradReceita)" strokeWidth={2} name="Receita" />
+                      <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5, paddingTop: 8 }} />
+                      <Area type="monotone" dataKey="receita" stroke="#a78bfa" fill="url(#gradReceita)" strokeWidth={2} name="Receita" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="chart-card">
                   <h4>VISITANTES & PEDIDOS</h4>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <RChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
-                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)' }} />
+                  <ResponsiveContainer width="100%" height={220}>
+                    <RChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} interval={4} />
+                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} width={30} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="visitantes" fill="rgba(99,179,237,0.85)" name="Visitantes" radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="pedidos" fill="#fff" name="Pedidos" radius={[3, 3, 0, 0]} />
+                      <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5, paddingTop: 8 }} />
+                      <Bar dataKey="visitantes" fill="#38bdf8" name="Visitantes" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                      <Bar dataKey="pedidos" fill="#4ade80" name="Pedidos" radius={[3, 3, 0, 0]} maxBarSize={18} />
                     </RChart>
                   </ResponsiveContainer>
                 </div>

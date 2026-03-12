@@ -299,6 +299,7 @@ function AppContent() {
   const [showPriceFilter, setShowPriceFilter] = useState(false);
   const [voiceSearching, setVoiceSearching] = useState(false);
   const voiceSearchRef = useRef(null);
+  const adminTabNavRef = useRef(null);
 
   // Persistir carrinho no localStorage
   useEffect(() => {
@@ -564,17 +565,21 @@ function AppContent() {
         </Link>
 
         {location.pathname === '/admin' ? (
-          <nav className="filters admin-header-tabs">
-            {adminTabs.map(tab => (
-              <button
-                key={tab}
-                className={`filter-btn ${adminTabAtiva === tab ? 'active' : ''}`}
-                onClick={() => setSearchParams({ tab })}
-              >
-                {adminTabLabels[tab]}
-              </button>
-            ))}
-          </nav>
+          <div className="admin-tabs-wrapper">
+            <button className="admin-tabs-arrow" onClick={() => adminTabNavRef.current?.scrollBy({ left: -120, behavior: 'smooth' })}>‹</button>
+            <nav className="filters admin-header-tabs" ref={adminTabNavRef}>
+              {adminTabs.map(tab => (
+                <button
+                  key={tab}
+                  className={`filter-btn ${adminTabAtiva === tab ? 'active' : ''}`}
+                  onClick={() => setSearchParams({ tab })}
+                >
+                  {adminTabLabels[tab]}
+                </button>
+              ))}
+            </nav>
+            <button className="admin-tabs-arrow" onClick={() => adminTabNavRef.current?.scrollBy({ left: 120, behavior: 'smooth' })}>›</button>
+          </div>
         ) : (
           <nav className={`filters ${filterLocked ? 'filters-locked' : ''}`}>
             {ligas.map(liga => (
