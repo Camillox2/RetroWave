@@ -1430,7 +1430,7 @@ app.get('/api/admin/stats/historico', (req, res) => {
     const dias = parseInt(req.query.dias) || 30;
     const sql = `
         SELECT
-            d.dia,
+            DATE_FORMAT(d.dia, '%Y-%m-%d') as dia,
             COALESCE(m.visitantes_unicos, 0) as visitantes,
             COALESCE(m.cliques_totais, 0) as cliques,
             COALESCE(p.receita, 0) as receita,

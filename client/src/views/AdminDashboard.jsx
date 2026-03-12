@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail, Bell, BellRing, TrendingUp, DollarSign, ChevronDown, ChevronRight, Send, Camera, Package, Sparkles, LayoutDashboard, Box, ImageIcon, Sliders, Receipt, ClipboardList, TicketPercent, MessageCircle, Users, AlertTriangle, Zap, BarChart3, Mic, MicOff, PanelLeftClose, PanelLeft, Trash } from 'lucide-react';
-import { AreaChart, Area, BarChart as RChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { ComposedChart, BarChart as RChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 import { API_URL } from '../config';
 
@@ -1835,43 +1835,52 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
             </div>
 
             {/* Charts (A2) */}
-            {chartData.length > 0 && (
-              <div className="dashboard-charts">
-                <div className="chart-card">
-                  <h4>RECEITA — ÚLTIMOS 30 DIAS</h4>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="gradReceita" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.5} />
-                          <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} interval={4} />
-                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} width={40} tickFormatter={v => `R$${v}`} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5, paddingTop: 8 }} />
-                      <Area type="monotone" dataKey="receita" stroke="#a78bfa" fill="url(#gradReceita)" strokeWidth={2} name="Receita" dot={false} activeDot={{ r: 4, fill: '#a78bfa' }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
+            {chartData.length > 0 && (() => {
+              const filled = chartData
+                .map(d => ({ ...d, dia: (d.dia || '').substring(5, 10) }))
+                .filter(d => d.receita > 0 || d.visitantes > 0 || d.pedidos > 0);
+              const noData = (
+                <div className="dashboard-charts">
+                  <div className="chart-card chart-empty">SEM DADOS NOS ÚLTIMOS 30 DIAS</div>
+                  <div className="chart-card chart-empty">SEM DADOS NOS ÚLTIMOS 30 DIAS</div>
                 </div>
-                <div className="chart-card">
-                  <h4>VISITANTES & PEDIDOS</h4>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <RChart data={chartData.map(d => ({ ...d, dia: d.dia?.substring(5) || '' }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="dia" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} interval={4} />
-                      <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.45)' }} tickLine={false} axisLine={false} width={30} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5, paddingTop: 8 }} />
-                      <Bar dataKey="visitantes" fill="#38bdf8" name="Visitantes" radius={[3, 3, 0, 0]} maxBarSize={18} />
-                      <Bar dataKey="pedidos" fill="#4ade80" name="Pedidos" radius={[3, 3, 0, 0]} maxBarSize={18} />
-                    </RChart>
-                  </ResponsiveContainer>
+              );
+              if (!filled.length) return noData;
+              const yTick = { fontSize: 9, fill: 'rgba(255,255,255,0.5)' };
+              const gridStroke = 'rgba(255,255,255,0.06)';
+              const margin = { top: 10, right: 10, left: 0, bottom: 4 };
+              return (
+                <div className="dashboard-charts">
+                  <div className="chart-card">
+                    <h4>RECEITA — ÚLTIMOS 30 DIAS</h4>
+                    <ResponsiveContainer width="100%" height={230}>
+                      <RChart data={filled} margin={margin}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                        <XAxis dataKey="dia" tick={false} axisLine={false} tickLine={false} />
+                        <YAxis tick={yTick} tickLine={false} axisLine={false} width={46} tickFormatter={v => `R$${v}`} allowDecimals={false} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5 }} />
+                        <Bar dataKey="receita" fill="#a78bfa" name="Receita" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                      </RChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="chart-card">
+                    <h4>VISITANTES & PEDIDOS</h4>
+                    <ResponsiveContainer width="100%" height={230}>
+                      <ComposedChart data={filled} margin={margin}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                        <XAxis dataKey="dia" tick={false} axisLine={false} tickLine={false} />
+                        <YAxis tick={yTick} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: '0.55rem', letterSpacing: 1.5 }} />
+                        <Bar dataKey="pedidos" fill="#4ade80" name="Pedidos" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                        <Line type="monotone" dataKey="visitantes" stroke="#38bdf8" strokeWidth={2} name="Visitantes" dot={{ r: 3, fill: '#38bdf8', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="dashboard-columns">
               <div className="dashboard-section">

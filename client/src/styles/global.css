@@ -5908,6 +5908,16 @@ button {
   text-transform: uppercase;
 }
 
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  opacity: 0.25;
+}
+
 @media (max-width: 700px) {
   .dashboard-charts {
     grid-template-columns: 1fr;
