@@ -3,7 +3,11 @@
     "allow": [
       "Bash(cd D:\\\\RetroWave-1\\\\server && npm run dev)",
       "Bash(cd /d/RetroWave-1/client && npm install 2>&1)",
-      "Bash(cd /d/RetroWave-1/client && npm install --legacy-peer-deps 2>&1)"
+      "Bash(cd /d/RetroWave-1/client && npm install --legacy-peer-deps 2>&1)",
+      "Bash(cd D:\\\\RetroWave-1\\\\server && npm install compression --save)",
+      "Bash(cd \"/d/RetroWave-1/server\" && npm install compression --save)",
+      "Bash(cd \"/d/RetroWave-1/server\" && npm install sharp --save 2>&1 | tail -5)",
+      "Bash(cd \"/d/RetroWave-1/client\" && npm run build 2>&1 | tail -10)"
     ]
   }
 }

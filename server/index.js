@@ -1,6 +1,42 @@
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
+const compression = require('compression');
+const sharp = require('sharp');
+
+// Cache de thumbs WebP em disco
+const THUMB_CACHE_DIR = path.join(__dirname, 'cache', 'thumbs');
+if (!fs.existsSync(THUMB_CACHE_DIR)) fs.mkdirSync(THUMB_CACHE_DIR, { recursive: true });
+
+async function serveWebP(res, base64, cacheKey) {
+    const cachePath = path.join(THUMB_CACHE_DIR, `${cacheKey}.webp`);
+    // Retorna do cache se existir
+    if (fs.existsSync(cachePath)) {
+        const etag = `"${cacheKey}"`;
+        res.set('Content-Type', 'image/webp');
+        res.set('Cache-Control', 'public, max-age=604800, immutable');
+        res.set('ETag', etag);
+        return res.sendFile(cachePath);
+    }
+    // Converte base64 → WebP e salva no cache
+    const matches = base64.match(/^data:(.+);base64,(.+)$/);
+    if (!matches) return res.status(400).send('');
+    const buffer = Buffer.from(matches[2], 'base64');
+    try {
+        const webp = await sharp(buffer).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+        fs.writeFileSync(cachePath, webp);
+        res.set('Content-Type', 'image/webp');
+        res.set('Cache-Control', 'public, max-age=604800, immutable');
+        res.set('ETag', `"${cacheKey}"`);
+        res.send(webp);
+    } catch {
+        // Fallback: serve original se sharp falhar
+        res.set('Content-Type', matches[1]);
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.send(buffer);
+    }
+}
 const mysql = require('mysql2');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -13,17 +49,21 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 // ═══════════════════════════════════════════════════════
 // AUTH — JWT persistente (sobrevive ao restart)
 // ═══════════════════════════════════════════════════════
-const JWT_SECRET = process.env.JWT_SECRET || 'retrowave-jwt-secret-change-me-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('⚠️  AVISO: JWT_SECRET não definido no .env! Usando valor padrão inseguro.');
+}
+const JWT_SECRET_REAL = JWT_SECRET || 'retrowave-jwt-secret-change-me-in-production';
 
 function generateAdminToken(adminId) {
-    return jwt.sign({ adminId, type: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    return jwt.sign({ adminId, type: 'admin' }, JWT_SECRET_REAL, { expiresIn: '24h' });
 }
 
 function requireAdmin(req, res, next) {
     const token = req.headers['x-admin-token'];
     if (!token) return res.status(401).json({ error: 'Não autorizado' });
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET_REAL);
         if (decoded.type !== 'admin') return res.status(401).json({ error: 'Não autorizado' });
         req.adminId = decoded.adminId;
         next();
@@ -34,17 +74,15 @@ function requireAdmin(req, res, next) {
 
 const app = express();
 
+// Compressão gzip
+app.use(compression());
+
 // Segurança: headers HTTP
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// CORS restrito ao frontend
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',').map(o => o.trim());
+// CORS aberto (segurança feita via JWT)
 app.use(cors({
-    origin: (origin, cb) => {
-        // Permitir sem origin (Postman/mobile) e origins autorizadas
-        if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
-        cb(new Error('CORS bloqueado'));
-    },
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'x-admin-token', 'ngrok-skip-browser-warning']
 }));
@@ -277,13 +315,9 @@ app.get('/api/config', (req, res) => {
 app.get('/api/banner-image', (req, res) => {
     db.query("SELECT valor FROM site_config WHERE chave = 'banner_imagem'", (err, rows) => {
         if (err || !rows.length || !rows[0].valor) return res.status(404).send('');
-        const base64 = rows[0].valor;
-        const matches = base64.match(/^data:(.+);base64,(.+)$/);
-        if (!matches) return res.status(400).send('');
-        const data = Buffer.from(matches[2], 'base64');
-        res.set('Content-Type', matches[1]);
-        res.set('Cache-Control', 'public, max-age=1800');
-        res.send(data);
+        const val = rows[0].valor;
+        if (val.startsWith('/uploads/')) return res.redirect(val);
+        serveWebP(res, val, 'banner').catch(() => res.status(500).send(''));
     });
 });
 
@@ -292,7 +326,9 @@ app.get('/api/produtos', (req, res) => {
     let sql = `SELECT p.id, p.nome, p.liga, p.preco, p.descricao, p.cliques, p.vendas, p.created_at,
                p.destaque, p.promo_desconto, p.promo_tipo, p.promo_inicio, p.promo_fim,
                p.estoque_p, p.estoque_m, p.estoque_g, p.estoque_gg,
-               (SELECT COUNT(*) FROM produto_imagens pi WHERE pi.produto_id = p.id) as imgCount FROM produtos p`;
+               COUNT(pi.id) as imgCount
+               FROM produtos p
+               LEFT JOIN produto_imagens pi ON pi.produto_id = p.id`;
     const params = [];
     const conditions = [];
 
@@ -309,7 +345,7 @@ app.get('/api/produtos', (req, res) => {
         sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' ORDER BY p.destaque DESC, p.id DESC';
+    sql += ' GROUP BY p.id ORDER BY p.destaque DESC, p.id DESC';
 
     db.query(sql, params, (err, produtos) => {
         if (err) return res.status(500).json({ error: 'Erro ao buscar produtos' });
@@ -349,31 +385,23 @@ app.get('/api/produtos/:id/imagens', (req, res) => {
     );
 });
 
-// Servir imagem extra como binário (igual ao thumb)
+// Servir imagem extra (URL estática ou base64 legado)
 app.get('/api/imagens/:imgId/bin', (req, res) => {
     db.query('SELECT imagem FROM produto_imagens WHERE id = ?', [req.params.imgId], (err, rows) => {
         if (err || !rows.length || !rows[0].imagem) return res.status(404).send('');
-        const base64 = rows[0].imagem;
-        const matches = base64.match(/^data:(.+);base64,(.+)$/);
-        if (!matches) return res.status(400).send('');
-        const data = Buffer.from(matches[2], 'base64');
-        res.set('Content-Type', matches[1]);
-        res.set('Cache-Control', 'public, max-age=3600');
-        res.send(data);
+        const img = rows[0].imagem;
+        if (img.startsWith('/uploads/')) return res.redirect(img);
+        serveWebP(res, img, `extra-${req.params.imgId}`).catch(() => res.status(500).send(''));
     });
 });
 
-// Thumbnail de produto (serve imagem como binário para <img src>)
+// Thumbnail de produto (URL estática ou base64 legado)
 app.get('/api/produtos/:id/thumb', (req, res) => {
     db.query('SELECT imagem FROM produtos WHERE id = ?', [req.params.id], (err, rows) => {
         if (err || !rows.length || !rows[0].imagem) return res.status(404).send('');
-        const base64 = rows[0].imagem;
-        const matches = base64.match(/^data:(.+);base64,(.+)$/);
-        if (!matches) return res.status(400).send('');
-        const data = Buffer.from(matches[2], 'base64');
-        res.set('Content-Type', matches[1]);
-        res.set('Cache-Control', 'public, max-age=3600');
-        res.send(data);
+        const img = rows[0].imagem;
+        if (img.startsWith('/uploads/')) return res.redirect(img);
+        serveWebP(res, img, `thumb-${req.params.id}`).catch(() => res.status(500).send(''));
     });
 });
 
@@ -511,41 +539,48 @@ app.post('/api/checkout', (req, res) => {
                                         }));
 
                                         Promise.all(vendaPromises).then(() => {
-                                            conn.commit(err => {
-                                                if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao confirmar pedido' }); });
-                                                conn.release();
+                                            const finalizarPedido = () => {
+                                                conn.commit(err => {
+                                                    if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao confirmar pedido' }); });
+                                                    conn.release();
 
-                                                // Incrementar uso do cupom DENTRO da transação (só se commit OK)
-                                                if (cupomValidado) {
-                                                    db.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [cupomValidado]);
-                                                }
+                                                    // Limpar carrinho abandonado
+                                                    db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
 
-                                                // Limpar carrinho abandonado
-                                                db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
+                                                    // Email de confirmação
+                                                    const itensEmail = carrinho.map(item => ({
+                                                        nome: precoMap[item.id].nome,
+                                                        tamanho: item.tamanho || 'M',
+                                                        quantidade: item.qtd || 1,
+                                                        preco_unitario: (() => {
+                                                            const p = precoMap[item.id];
+                                                            let pr = parseFloat(p.preco);
+                                                            const pA = p.promo_desconto && p.promo_inicio && p.promo_fim && p.promo_inicio <= hoje && p.promo_fim >= hoje;
+                                                            if (pA) pr = p.promo_tipo === 'porcentagem' ? pr * (1 - p.promo_desconto / 100) : pr - p.promo_desconto;
+                                                            return pr.toFixed(2);
+                                                        })()
+                                                    }));
 
-                                                // Email de confirmação (H-4: nomes vêm do banco, não do cliente)
-                                                const itensEmail = carrinho.map(item => ({
-                                                    nome: precoMap[item.id].nome,
-                                                    tamanho: item.tamanho || 'M',
-                                                    quantidade: item.qtd || 1,
-                                                    preco_unitario: (() => {
-                                                        const p = precoMap[item.id];
-                                                        let pr = parseFloat(p.preco);
-                                                        const pA = p.promo_desconto && p.promo_inicio && p.promo_fim && p.promo_inicio <= hoje && p.promo_fim >= hoje;
-                                                        if (pA) pr = p.promo_tipo === 'porcentagem' ? pr * (1 - p.promo_desconto / 100) : pr - p.promo_desconto;
-                                                        return pr.toFixed(2);
-                                                    })()
-                                                }));
+                                                    sendEmail(email, `Pedido #${pedidoId} — Retro Wave`,
+                                                        buildOrderEmailHtml(pedidoId, nome, itensEmail, totalFinal, 'concluido'))
+                                                        .catch(e => console.error('Email confirmação erro:', e.message));
 
-                                                sendEmail(email, `Pedido #${pedidoId} — Retro Wave`,
-                                                    buildOrderEmailHtml(pedidoId, nome, itensEmail, totalFinal, 'concluido'))
-                                                    .catch(e => console.error('Email confirmação erro:', e.message));
-
-                                                db.query('SELECT id, email, nome, endereco FROM usuarios WHERE id = ?', [userId], (err, rows) => {
-                                                    const cliente = rows && rows[0] ? rows[0] : { id: userId, email, nome, endereco };
-                                                    res.json({ success: true, pedidoId, cliente, total: totalFinal.toFixed(2) });
+                                                    db.query('SELECT id, email, nome, endereco FROM usuarios WHERE id = ?', [userId], (err, rows) => {
+                                                        const cliente = rows && rows[0] ? rows[0] : { id: userId, email, nome, endereco };
+                                                        res.json({ success: true, pedidoId, cliente, total: totalFinal.toFixed(2) });
+                                                    });
                                                 });
-                                            });
+                                            };
+
+                                            // Incrementar cupom dentro da transação antes do commit
+                                            if (cupomValidado) {
+                                                conn.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [cupomValidado], (errCupom) => {
+                                                    if (errCupom) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao aplicar cupom' }); });
+                                                    finalizarPedido();
+                                                });
+                                            } else {
+                                                finalizarPedido();
+                                            }
                                         });
                                     });
                                 });
@@ -1962,6 +1997,19 @@ Responda APENAS o JSON, sem crases ou formatação.` }]
     } catch {
         res.json({ reply: 'Não consegui interpretar o comando', action: 'none' });
     }
+});
+
+// ═══════════════════════════════════════════════════════
+// FRONTEND — Serve o build do React e uploads estáticos
+// ═══════════════════════════════════════════════════════
+const distPath = path.join(__dirname, '../client/dist');
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads'), {
+    maxAge: '7d',
+    immutable: true
+}));
+app.use(express.static(distPath));
+app.get('/{*path}', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // ═══════════════════════════════════════════════════════
