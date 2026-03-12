@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/index.jsx';
 import { API_URL } from '../config.js';
-import { Package, Truck, CheckCircle, Clock, XCircle, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Truck, CheckCircle, Clock, XCircle, LogOut, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 const STATUS_CONFIG = {
   aguardando: { label: 'AGUARDANDO ENVIO', icon: Clock, step: 1 },
@@ -23,21 +23,35 @@ function MeusPedidos({ cliente, onLogout }) {
   const [fetchError, setFetchError] = useState(false);
   const [expandedPedido, setExpandedPedido] = useState(null);
   const [page, setPage] = useState(1);
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  const fetchPedidos = useCallback(() => {
+    if (!cliente?.email) return;
+    fetch(`${API_URL}/api/cliente/pedidos?email=${encodeURIComponent(cliente.email)}`)
+      .then(r => r.json())
+      .then(data => {
+        setPedidos(Array.isArray(data) ? data : []);
+        setLoading(false);
+        setFetchError(false);
+        setLastRefresh(new Date());
+      })
+      .catch(() => { setFetchError(true); setLoading(false); });
+  }, [cliente?.email]);
 
   useEffect(() => {
     if (!cliente?.email) {
       navigate('/');
       return;
     }
+    fetchPedidos();
+  }, [cliente, navigate, fetchPedidos]);
 
-    fetch(`${API_URL}/api/cliente/pedidos?email=${encodeURIComponent(cliente.email)}`)
-      .then(r => r.json())
-      .then(data => {
-        setPedidos(data);
-        setLoading(false);
-      })
-      .catch(() => { setFetchError(true); setLoading(false); });
-  }, [cliente, navigate]);
+  // Auto-refresh every 30s
+  useEffect(() => {
+    if (!cliente?.email) return;
+    const interval = setInterval(fetchPedidos, 30000);
+    return () => clearInterval(interval);
+  }, [cliente?.email, fetchPedidos]);
 
   if (loading) {
     return (
@@ -62,13 +76,13 @@ function MeusPedidos({ cliente, onLogout }) {
     const { status, data_envio, codigo_rastreio } = pedido;
     if (status === 'entregue') return t('orders.delivered') || 'Pedido entregue';
     if (status === 'cancelado') return t('orders.cancelled') || 'Pedido cancelado';
-    if (status === 'aguardando' || status === 'preparando') return 'Data de envio a confirmar';
+    if (status === 'aguardando' || status === 'preparando') return t('orders.delivery_to_confirm');
     if (status === 'enviado' && data_envio) {
       const d = new Date(data_envio);
       d.setDate(d.getDate() + 10);
-      return `Previsão de entrega: ${d.toLocaleDateString('pt-BR')}`;
+      return t('orders.delivery_estimate').replace('{date}', d.toLocaleDateString('pt-BR'));
     }
-    return 'Previsão de entrega em breve';
+    return t('orders.delivery_soon');
   };
 
   return (
@@ -78,12 +92,18 @@ function MeusPedidos({ cliente, onLogout }) {
           <h1>{t('orders.title')}</h1>
           <p className="pedidos-cliente-info">
             {cliente.nome} — {cliente.email}
+            {lastRefresh && <span style={{ opacity: 0.3, marginLeft: 12, fontSize: '0.55rem' }}>⟳ {lastRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
           </p>
         </div>
-        <button className="pedidos-logout" onClick={onLogout}>
-          <LogOut size={14} />
-          {t('orders.logout')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="pedidos-refresh-btn" onClick={fetchPedidos} title="Atualizar pedidos">
+            <RefreshCw size={14} />
+          </button>
+          <button className="pedidos-logout" onClick={onLogout}>
+            <LogOut size={14} />
+            {t('orders.logout')}
+          </button>
+        </div>
       </div>
 
       {pedidos.length === 0 ? (
@@ -129,7 +149,7 @@ function MeusPedidos({ cliente, onLogout }) {
                   <div className="tracking-bar">
                     <div className="tracking-progress" style={{ width: `${(statusInfo.step / 4) * 100}%` }} />
                     <div className="tracking-steps">
-                      {['Aguardando', 'Preparando', 'Enviado', 'Entregue'].map((label, i) => (
+                      {[t('orders.track_waiting'), t('orders.track_preparing'), t('orders.track_shipped'), t('orders.track_delivered')].map((label, i) => (
                         <div
                           key={label}
                           className={`tracking-step ${(i + 1) <= statusInfo.step ? 'active' : ''}`}
@@ -152,14 +172,14 @@ function MeusPedidos({ cliente, onLogout }) {
                     {pedido.codigo_rastreio && (
                       <div className="pedido-rastreio">
                         <Package size={14} />
-                        <span>Rastreio: <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{pedido.codigo_rastreio}</strong></span>
+                        <span>{t('orders.tracking_label')} <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{pedido.codigo_rastreio}</strong></span>
                         <a
-                          href={`https://rastreamento.correios.com.br/app/index.php?objetos=${pedido.codigo_rastreio}`}
+                          href={`https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(pedido.codigo_rastreio)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="rastreio-link"
                         >
-                          Rastrear nos Correios ↗
+                          {t('orders.tracking_link')} ↗
                         </a>
                       </div>
                     )}
@@ -197,13 +217,13 @@ function MeusPedidos({ cliente, onLogout }) {
                 disabled={page === 1}
                 onClick={() => setPage(p => p - 1)}
                 className="pedidos-page-btn"
-              >← Anterior</button>
+              >← {t('orders.page_prev').replace('← ', '')}</button>
               <span>{page} / {Math.ceil(pedidos.length / PER_PAGE)}</span>
               <button
                 disabled={page >= Math.ceil(pedidos.length / PER_PAGE)}
                 onClick={() => setPage(p => p + 1)}
                 className="pedidos-page-btn"
-              >Próxima →</button>
+              >{t('orders.page_next').replace(' →', '')} →</button>
             </div>
           )}
         </div>

@@ -25,7 +25,7 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [cupomError, setCupomError] = useState('');
 
-  const subtotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal || item.preco) * item.qtd, 0);
+  const subtotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal ?? item.preco) * item.qtd, 0);
 
   const FRETE = 29.90;
   const FRETE_GRATIS = 299.90;
@@ -36,7 +36,7 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
     if (cupomData.tipo === 'porcentagem') desconto = subtotal * (cupomData.valor / 100);
     else desconto = Math.min(cupomData.valor, subtotal);
   }
-  const total = Math.max(0, subtotal - desconto + freteValor);
+  const total = Math.max(0, subtotal + freteValor - desconto);
 
   const buscarCep = async (cep) => {
     const clean = cep.replace(/\D/g, '');
@@ -110,10 +110,11 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
         setCart([]);
 
         // Salvar cliente no localStorage para login persistente
+        const enderecoString = [formData.logradouro, formData.numero, formData.complemento, formData.bairro, formData.cidade + (formData.estado ? ' - ' + formData.estado : ''), `CEP ${formData.cep}`].filter(Boolean).join(', ');
         const clienteData = data.cliente || {
           email: formData.email,
           nome: formData.nome,
-          endereco: formData.endereco
+          endereco: enderecoString
         };
         localStorage.setItem('retrowave_cliente', JSON.stringify(clienteData));
         if (onClienteLogin) onClienteLogin(clienteData);

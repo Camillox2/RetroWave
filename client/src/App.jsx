@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, BarChart, Menu, Plus, Minus, Package, Search, AlertCircle, Check, ShoppingCart, Mail, Shield, Globe } from 'lucide-react';
+import { ShoppingBag, X, BarChart, Menu, Plus, Minus, Package, Search, AlertCircle, Check, ShoppingCart, Mail, Shield, Globe, Mic, MicOff, SlidersHorizontal } from 'lucide-react';
 
 import './styles/global.css';
 import './styles/responsive.css';
@@ -276,7 +276,12 @@ class ErrorBoundary extends React.Component {
 }
 
 function AppContent() {
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem('retrowave_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
@@ -290,6 +295,15 @@ function AppContent() {
   const [nlStatus, setNlStatus] = useState('');
   const [filterLocked, setFilterLocked] = useState(false);
   const [anuncioBanner, setAnuncioBanner] = useState(null);
+  const [priceRange, setPriceRange] = useState([0, 999]);
+  const [showPriceFilter, setShowPriceFilter] = useState(false);
+  const [voiceSearching, setVoiceSearching] = useState(false);
+  const voiceSearchRef = useRef(null);
+
+  // Persistir carrinho no localStorage
+  useEffect(() => {
+    localStorage.setItem('retrowave_cart', JSON.stringify(cart));
+  }, [cart]);
 
   // Buscar anúncio ativo do site
   useEffect(() => {
@@ -417,7 +431,7 @@ function AppContent() {
     setCart(prev => prev.filter((_, i) => i !== index));
   };
 
-  const cartTotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal || item.preco) * item.qtd, 0);
+  const cartTotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal ?? item.preco) * item.qtd, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qtd, 0);
 
   // Cart abandonment — save to backend when user has email and cart isn't empty
@@ -494,6 +508,31 @@ function AppContent() {
     setIsMobileMenuOpen(false);
     setTimeout(() => setFilterLocked(false), 800);
   };
+
+  const toggleVoiceSearch = useCallback(() => {
+    if (voiceSearching) {
+      voiceSearchRef.current?.stop();
+      setVoiceSearching(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.continuous = false;
+    rec.interimResults = false;
+    voiceSearchRef.current = rec;
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setSearchQuery(text);
+      if (!searchOpen) setSearchOpen(true);
+    };
+    rec.onerror = () => setVoiceSearching(false);
+    rec.onend = () => setVoiceSearching(false);
+    setVoiceSearching(true);
+    if (!searchOpen) setSearchOpen(true);
+    rec.start();
+  }, [voiceSearching, searchOpen]);
 
   return (
     <>
@@ -636,7 +675,52 @@ function AppContent() {
                   <X size={14} />
                 </button>
               )}
+              {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+                <button
+                  className={`search-voice-btn ${voiceSearching ? 'active' : ''}`}
+                  onClick={toggleVoiceSearch}
+                  aria-label="Busca por voz"
+                >
+                  {voiceSearching ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+              )}
+              <button
+                className={`search-filter-btn ${showPriceFilter ? 'active' : ''}`}
+                onClick={() => setShowPriceFilter(v => !v)}
+                aria-label="Filtro de preço"
+              >
+                <SlidersHorizontal size={14} />
+              </button>
             </div>
+            {showPriceFilter && (
+              <div className="price-filter-bar">
+                <span className="price-filter-label">R$ {priceRange[0]}</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="500"
+                  step="10"
+                  value={priceRange[0]}
+                  onChange={e => setPriceRange([Math.min(Number(e.target.value), priceRange[1] - 10), priceRange[1]])}
+                  className="price-range-input"
+                />
+                <input
+                  type="range"
+                  min="0"
+                  max="999"
+                  step="10"
+                  value={priceRange[1]}
+                  onChange={e => setPriceRange([priceRange[0], Math.max(Number(e.target.value), priceRange[0] + 10)])}
+                  className="price-range-input"
+                />
+                <span className="price-filter-label">R$ {priceRange[1] >= 999 ? '∞' : priceRange[1]}</span>
+                {(priceRange[0] > 0 || priceRange[1] < 999) && (
+                  <button className="price-filter-reset" onClick={() => setPriceRange([0, 999])}>
+                    <X size={12} /> LIMPAR
+                  </button>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -644,7 +728,7 @@ function AppContent() {
       {/* ── ROUTES ── */}
       <main>
         <Routes location={location}>
-          <Route path="/" element={<Home ligaAtiva={ligaAtiva} addToCart={addToCart} searchQuery={searchQuery} forceReload={forceReload} cliente={cliente} />} />
+          <Route path="/" element={<Home ligaAtiva={ligaAtiva} addToCart={addToCart} searchQuery={searchQuery} forceReload={forceReload} cliente={cliente} priceRange={priceRange} />} />
           <Route path="/checkout" element={
             <Checkout cart={cart} setCart={setCart} onClienteLogin={handleClienteLogin} />
           } />

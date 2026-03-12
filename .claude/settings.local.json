@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd D:\\\\RetroWave-1\\\\server && npm run dev)",
+      "Bash(cd /d/RetroWave-1/client && npm install 2>&1)",
+      "Bash(cd /d/RetroWave-1/client && npm install --legacy-peer-deps 2>&1)"
+    ]
+  }
+}

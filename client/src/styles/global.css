@@ -308,6 +308,26 @@ button {
   }
 }
 
+/* Card slideshow overlay on hover */
+.card-slideshow-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.card-slideshow-overlay img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.card-slideshow-overlay img.slide-active {
+  opacity: 1;
+}
+
 /* Quando o grid está saindo: cards deslizam pra baixo e somem */
 .product-grid.grid-exit .product-item {
   animation: productExit 0.25s cubic-bezier(0.55, 0.06, 0.68, 0.19) both;
@@ -409,10 +429,16 @@ button {
   left: 0;
   right: 0;
   height: 60%;
-  background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 100%);
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0) 100%);
   pointer-events: none;
   z-index: 2;
   transform: translateZ(25px);
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+.product-item:hover::after {
+  opacity: 0;
 }
 
 .product-info {
@@ -421,6 +447,14 @@ button {
   padding: 25px;
   color: #ffffff;
   text-transform: uppercase;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7);
+}
+
+.product-item:hover .product-info {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .product-info .liga-tag {
@@ -943,6 +977,26 @@ button {
   opacity: 1;
 }
 
+.pedidos-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: none;
+  color: var(--text-color);
+  cursor: pointer;
+  opacity: 0.4;
+  transition: all 0.2s;
+}
+
+.pedidos-refresh-btn:hover {
+  opacity: 1;
+  border-color: rgba(255,255,255,0.3);
+}
+
 .pedidos-loading {
   display: flex;
   align-items: center;
@@ -1232,6 +1286,170 @@ button {
   padding: 40px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* ═══════════════════════════════════════
+   ADMIN SIDEBAR LAYOUT
+   ═══════════════════════════════════════ */
+.admin-layout {
+  display: flex;
+  max-width: 1600px;
+  padding: 0;
+  gap: 0;
+}
+
+.admin-sidebar {
+  width: 200px;
+  min-height: calc(100vh - 60px);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.35s cubic-bezier(0.4,0,0.2,1);
+  background: rgba(0,0,0,0.15);
+  will-change: width;
+  overflow: hidden;
+}
+
+.admin-sidebar.collapsed {
+  width: 52px;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: none;
+  color: var(--text-color);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.sidebar-toggle:hover {
+  opacity: 1;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border: none;
+  background: none;
+  color: var(--text-color);
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.2s, background 0.2s;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.admin-sidebar.collapsed .sidebar-item {
+  justify-content: center;
+  padding: 9px 0;
+}
+
+.sidebar-item:hover {
+  opacity: 0.8;
+  background: rgba(255,255,255,0.03);
+}
+
+.sidebar-item.active {
+  opacity: 1;
+  background: rgba(255,255,255,0.06);
+  border-right: 2px solid var(--text-color);
+}
+
+.admin-main {
+  flex: 1;
+  padding: 40px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════
+   VOICE COMMAND UI
+   ═══════════════════════════════════════ */
+.voice-cmd-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.voice-cmd-btn:hover {
+  border-color: rgba(255,255,255,0.3);
+}
+
+.voice-cmd-btn.active {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  animation: voicePulseBtn 1.5s infinite;
+}
+
+@keyframes voicePulseBtn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+
+.voice-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+}
+
+.voice-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: voiceDot 1s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes voiceDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.voice-text {
+  opacity: 0.7;
+}
+
+.voice-result {
+  color: #4ade80;
+  font-weight: 600;
 }
 
 .dashboard-header {
@@ -1987,6 +2205,90 @@ button {
 }
 
 .search-clear:hover {
+  opacity: 1;
+}
+
+/* Voice Search & Price Filter */
+.search-voice-btn,
+.search-filter-btn {
+  background: none !important;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color);
+  opacity: 0.35;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.search-voice-btn:hover,
+.search-filter-btn:hover {
+  opacity: 0.8;
+}
+
+.search-voice-btn.active {
+  opacity: 1;
+  color: #ef4444;
+  animation: voicePulseBtn 1.5s infinite;
+}
+
+.search-filter-btn.active {
+  opacity: 1;
+}
+
+.price-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px 12px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.price-filter-label {
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  min-width: 45px;
+  text-align: center;
+}
+
+.price-range-input {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+  outline: none;
+}
+
+.price-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-color);
+  cursor: pointer;
+}
+
+.price-filter-reset {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-color);
+  font-size: 0.5rem;
+  letter-spacing: 1.5px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.price-filter-reset:hover {
   opacity: 1;
 }
 
@@ -2994,12 +3296,12 @@ button {
 
 .chatbot-input-wrap {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 6px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 100px;
-  padding: 4px 6px 4px 16px;
+  border-radius: 20px;
+  padding: 4px 6px 4px 12px;
   transition: border-color 0.2s ease;
 }
 
@@ -3064,6 +3366,60 @@ button {
   opacity: 0.25;
   margin-top: 8px;
   font-weight: 500;
+}
+
+/* ChatBot voice button */
+.chatbot-voice-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: none;
+  color: rgba(255,255,255,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.chatbot-voice-btn:hover {
+  color: #fff;
+  border-color: rgba(255,255,255,0.3);
+}
+
+.chatbot-voice-btn.active {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  animation: voicePulseBtn 1.5s infinite;
+}
+
+/* ChatBot scroll to bottom */
+.chat-scroll-bottom {
+  position: sticky;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  cursor: pointer;
+  z-index: 5;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.chat-scroll-bottom:hover {
+  opacity: 1;
+  background: rgba(255,255,255,0.2);
 }
 
 /* ═══════════════════════════════ ADMIN TOAST ═══════════════════════════════ */
@@ -4905,14 +5261,37 @@ button {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 5;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.25s, color 0.25s, transform 0.2s;
+}
+
+.card-cart-btn {
+  position: absolute;
+  top: 48px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
   opacity: 0;
   transition: opacity 0.25s, color 0.25s, transform 0.2s;
 }
 
 .product-item:hover .card-fav-btn { opacity: 1; }
+.product-item:hover .card-cart-btn { opacity: 1; }
 .card-fav-btn.active { opacity: 1; color: #e25555; }
 .card-fav-btn:hover { transform: scale(1.15); }
+.card-cart-btn:hover { transform: scale(1.15); color: #fff; }
+.card-cart-btn:disabled { opacity: 0.3 !important; cursor: not-allowed; }
 
 /* ── Modal Favorite Button (C1) ── */
 .modal-fav-btn {

@@ -77,10 +77,16 @@ async function sendEmail(to, subject, html) {
   return info;
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function buildOrderEmailHtml(pedidoId, nome, itens, total, status, extraHtml = '') {
   const statusLabel = { aguardando: 'Aguardando Envio', concluido: 'Confirmado', preparando: 'Em preparação', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
+  const safeNome = escapeHtml(nome);
   const itemsHtml = itens.map(i =>
-    `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${i.nome} (TAM ${i.tamanho}) × ${i.quantidade}</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #eee">R$ ${(parseFloat(i.preco_unitario) * i.quantidade).toFixed(2)}</td></tr>`
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${escapeHtml(i.nome)} (TAM ${escapeHtml(i.tamanho)}) × ${i.quantidade}</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #eee">R$ ${(parseFloat(i.preco_unitario) * i.quantidade).toFixed(2)}</td></tr>`
   ).join('');
   return `
     <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;color:#111">
@@ -88,7 +94,7 @@ function buildOrderEmailHtml(pedidoId, nome, itens, total, status, extraHtml = '
         <h1 style="margin:0;font-size:22px;letter-spacing:4px">RETRO WAVE</h1>
       </div>
       <div style="padding:32px 24px">
-        <h2 style="font-size:16px;letter-spacing:2px">Olá, ${nome || 'cliente'}!</h2>
+        <h2 style="font-size:16px;letter-spacing:2px">Olá, ${safeNome || 'cliente'}!</h2>
         <p style="color:#555">Seu pedido <strong>#${pedidoId}</strong> foi atualizado:</p>
         <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;letter-spacing:1px">
           STATUS: <strong>${statusLabel[status] || status.toUpperCase()}</strong>
@@ -198,12 +204,9 @@ db.query(`CREATE TABLE IF NOT EXISTS carrinhos_abandonados (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_email (email)
 )`);
-// H-3: garantir unique key mesmo em tabelas já existentes
-db.query(`ALTER TABLE carrinhos_abandonados ADD UNIQUE KEY IF NOT EXISTS uq_email (email)`, () => {});
-
-// Colunas de rastreio nos pedidos
-db.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS codigo_rastreio VARCHAR(100) DEFAULT NULL`, () => {});
-db.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_envio DATE DEFAULT NULL`, () => {});
+// Colunas de rastreio nos pedidos (MySQL-compatible: ignore ER_DUP_FIELDNAME)
+db.query('ALTER TABLE pedidos ADD COLUMN codigo_rastreio VARCHAR(100) DEFAULT NULL', (err) => {});
+db.query('ALTER TABLE pedidos ADD COLUMN data_envio DATE DEFAULT NULL', (err) => {});
 
 // Anúncios / Promoções do site (aba Admin Promoções)
 db.query(`CREATE TABLE IF NOT EXISTS anuncios (
@@ -439,14 +442,15 @@ app.post('/api/checkout', (req, res) => {
         if (totalReal < FRETE_GRATIS) totalReal += FRETE;
 
         // Aplicar cupom (se informado, validar no banco)
-        const aplicarCupomEProsseguir = (descontoCupom) => {
+        const aplicarCupomEProsseguir = (descontoCupom, cupomValidado) => {
             const totalFinal = Math.max(0, totalReal - (descontoCupom || 0));
-            processarCheckout(totalFinal);
+            processarCheckout(totalFinal, cupomValidado);
         };
 
         if (cupomCodigo) {
             db.query('SELECT * FROM cupons WHERE codigo = ? AND ativo = 1', [cupomCodigo.toUpperCase().trim()], (err, cupons) => {
                 let desconto = 0;
+                let cupomValidado = null;
                 if (!err && cupons.length > 0) {
                     const c = cupons[0];
                     const valido = (!c.validade || c.validade >= hoje)
@@ -455,16 +459,16 @@ app.post('/api/checkout', (req, res) => {
                         desconto = c.tipo === 'porcentagem'
                             ? totalReal * (c.valor / 100)
                             : parseFloat(c.valor);
-                        db.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [c.codigo]);
+                        cupomValidado = c.codigo;
                     }
                 }
-                aplicarCupomEProsseguir(desconto);
+                aplicarCupomEProsseguir(desconto, cupomValidado);
             });
         } else {
-            aplicarCupomEProsseguir(0);
+            aplicarCupomEProsseguir(0, null);
         }
 
-        function processarCheckout(totalFinal) {
+        function processarCheckout(totalFinal, cupomValidado) {
             // C-4: usar transaction para evitar sobrevenda
             db.getConnection((err, conn) => {
                 if (err) return res.status(500).json({ error: 'Erro de conexão' });
@@ -473,15 +477,10 @@ app.post('/api/checkout', (req, res) => {
                     if (err) { conn.release(); return res.status(500).json({ error: 'Erro ao iniciar transação' }); }
 
                     // Verificar e decrementar estoque com lock
-                    let estoqueOk = true;
-                    let pendentes = carrinho.length;
-
                     const onEstoqueVerificado = (estoqueErro) => {
                         if (estoqueErro) {
                             return conn.rollback(() => { conn.release(); res.status(400).json({ error: estoqueErro }); });
                         }
-                        pendentes--;
-                        if (pendentes > 0) return;
 
                         // Upsert usuário
                         conn.query('SELECT id FROM usuarios WHERE email = ?', [email], (err, users) => {
@@ -515,6 +514,11 @@ app.post('/api/checkout', (req, res) => {
                                             conn.commit(err => {
                                                 if (err) return conn.rollback(() => { conn.release(); res.status(500).json({ error: 'Erro ao confirmar pedido' }); });
                                                 conn.release();
+
+                                                // Incrementar uso do cupom DENTRO da transação (só se commit OK)
+                                                if (cupomValidado) {
+                                                    db.query('UPDATE cupons SET usos_atuais = usos_atuais + 1 WHERE codigo = ?', [cupomValidado]);
+                                                }
 
                                                 // Limpar carrinho abandonado
                                                 db.query('UPDATE carrinhos_abandonados SET recuperado = 1 WHERE email = ?', [email]);
@@ -597,6 +601,7 @@ app.get('/api/cliente/pedidos', (req, res) => {
 
     db.query(
         `SELECT p.id, p.total, p.status, p.created_at,
+                p.codigo_rastreio, p.data_envio,
                 u.nome, u.email, u.endereco
          FROM pedidos p
          JOIN usuarios u ON p.usuario_id = u.id
@@ -880,7 +885,7 @@ app.get('/api/admin/stats', (req, res) => {
 // CRUD Produtos (Admin - com imagens)
 app.get('/api/admin/produtos', (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const offset = (page - 1) * limit;
     const search = req.query.search || '';
 
@@ -922,6 +927,44 @@ app.get('/api/admin/produtos', (req, res) => {
             }
         );
     });
+    });
+});
+
+// Estoque baixo (DEVE ficar ANTES de :id para não conflitar)
+app.get('/api/admin/produtos/estoque-baixo', (req, res) => {
+    const limite = Math.min(parseInt(req.query.limite) || 20, 100);
+    db.query(
+        `SELECT id, nome, liga, estoque_p, estoque_m, estoque_g, estoque_gg,
+                LEAST(
+                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
+                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
+                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
+                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
+                ) AS menor_estoque
+         FROM produtos
+         WHERE (estoque_p >= 0 OR estoque_m >= 0 OR estoque_g >= 0 OR estoque_gg >= 0)
+         ORDER BY LEAST(
+                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
+                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
+                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
+                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
+                 ) ASC
+         LIMIT ?`,
+        [limite],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: 'Erro ao buscar estoque' });
+            res.json(rows);
+        }
+    );
+});
+
+// ═══════════════════════════════════════════════════════
+// LIXEIRA — Soft-deleted products
+// ═══════════════════════════════════════════════════════
+app.get('/api/admin/produtos/lixeira', requireAdmin, (req, res) => {
+    db.query("SELECT id, nome, liga, preco FROM produtos WHERE nome LIKE '%[REMOVIDO]%'", (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Erro' });
+        res.json(rows);
     });
 });
 
@@ -1008,8 +1051,43 @@ app.put('/api/admin/produtos/:id', (req, res) => {
 
 app.delete('/api/admin/produtos/:id', (req, res) => {
     const { id } = req.params;
-    // produto_imagens deleted by CASCADE
-    db.query('DELETE FROM itens_pedido WHERE produto_id = ?', [id], () => {
+    // Verificar se o produto tem pedidos associados
+    db.query('SELECT COUNT(*) as total FROM itens_pedido WHERE produto_id = ?', [id], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Erro ao verificar' });
+        if (rows[0].total > 0) {
+            // Soft-delete: desativar produto em vez de apagar (preserva histórico de pedidos)
+            db.query('UPDATE produtos SET nome = CONCAT(nome, " [REMOVIDO]"), liga = CONCAT("_", liga) WHERE id = ?', [id], (err2) => {
+                if (err2) return res.status(500).json({ error: 'Erro ao desativar' });
+                // produto_imagens deleted by CASCADE
+                db.query('DELETE FROM produto_imagens WHERE produto_id = ?', [id], () => {});
+                res.json({ success: true });
+            });
+        } else {
+            // Sem pedidos: pode deletar normalmente
+            db.query('DELETE FROM produtos WHERE id = ?', [id], (err2) => {
+                if (err2) return res.status(500).json({ error: 'Erro ao deletar' });
+                res.json({ success: true });
+            });
+        }
+    });
+});
+
+app.put('/api/admin/produtos/:id/restore', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    db.query('SELECT nome, liga FROM produtos WHERE id = ?', [id], (err, rows) => {
+        if (err || rows.length === 0) return res.status(404).json({ error: 'Produto não encontrado' });
+        const nome = rows[0].nome.replace(' [REMOVIDO]', '');
+        const liga = rows[0].liga.replace(/^_/, '');
+        db.query('UPDATE produtos SET nome = ?, liga = ? WHERE id = ?', [nome, liga, id], (err2) => {
+            if (err2) return res.status(500).json({ error: 'Erro ao restaurar' });
+            res.json({ success: true });
+        });
+    });
+});
+
+app.delete('/api/admin/produtos/:id/permanent', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    db.query('DELETE FROM produto_imagens WHERE produto_id = ?', [id], () => {
         db.query('DELETE FROM produtos WHERE id = ?', [id], (err) => {
             if (err) return res.status(500).json({ error: 'Erro ao deletar' });
             res.json({ success: true });
@@ -1053,11 +1131,13 @@ app.put('/api/admin/produtos/:id/imagens/reorder', (req, res) => {
     if (!ordens || !Array.isArray(ordens)) return res.status(400).json({ error: 'Dados inválidos' });
 
     let done = 0;
+    let hasError = false;
     ordens.forEach(item => {
         db.query('UPDATE produto_imagens SET ordem = ? WHERE id = ? AND produto_id = ?',
-            [item.ordem, item.id, id], () => {
+            [item.ordem, item.id, id], (err) => {
+                if (err && !hasError) { hasError = true; return res.status(500).json({ error: 'Erro ao reordenar' }); }
                 done++;
-                if (done === ordens.length) res.json({ success: true });
+                if (!hasError && done === ordens.length) res.json({ success: true });
             });
     });
     if (ordens.length === 0) res.json({ success: true });
@@ -1156,9 +1236,9 @@ app.put('/api/admin/pedidos/:id/status', (req, res) => {
                         extra = `
                             <div style="background:#f0f9f0;border:1px solid #4caf50;border-radius:8px;padding:16px 20px;margin:20px 0">
                                 <p style="margin:0 0 8px;font-weight:bold;color:#2e7d32">📦 Código de Rastreio:</p>
-                                <p style="margin:0;font-size:18px;font-family:monospace;letter-spacing:2px">${codigo_rastreio}</p>
+                                <p style="margin:0;font-size:18px;font-family:monospace;letter-spacing:2px">${escapeHtml(codigo_rastreio)}</p>
                                 ${dtEnvio ? `<p style="margin:8px 0 0;font-size:12px;color:#555">Enviado em: ${dtEnvio}</p>` : ''}
-                                <a href="https://rastreamento.correios.com.br/app/index.php?objetos=${codigo_rastreio}"
+                                <a href="https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo_rastreio)}"
                                    style="display:inline-block;margin-top:12px;background:#2e7d32;color:#fff;padding:8px 16px;border-radius:4px;text-decoration:none;font-size:12px;letter-spacing:1px">
                                    RASTREAR PELO SITE DOS CORREIOS
                                 </a>
@@ -1583,36 +1663,6 @@ app.get('/api/produtos/:id/relacionados', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// ESTOQUE BAIXO (admin)
-// ═══════════════════════════════════════════════════════
-app.get('/api/admin/produtos/estoque-baixo', requireAdmin, (req, res) => {
-    const limite = Math.min(parseInt(req.query.limite) || 20, 100);
-    db.query(
-        `SELECT id, nome, liga, estoque_p, estoque_m, estoque_g, estoque_gg,
-                LEAST(
-                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
-                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
-                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
-                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
-                ) AS menor_estoque
-         FROM produtos
-         WHERE (estoque_p >= 0 OR estoque_m >= 0 OR estoque_g >= 0 OR estoque_gg >= 0)
-         ORDER BY LEAST(
-                    CASE WHEN estoque_p >= 0 THEN estoque_p ELSE 9999 END,
-                    CASE WHEN estoque_m >= 0 THEN estoque_m ELSE 9999 END,
-                    CASE WHEN estoque_g >= 0 THEN estoque_g ELSE 9999 END,
-                    CASE WHEN estoque_gg >= 0 THEN estoque_gg ELSE 9999 END
-                 ) ASC
-         LIMIT ?`,
-        [limite],
-        (err, rows) => {
-            if (err) return res.status(500).json({ error: 'Erro ao buscar estoque' });
-            res.json(rows);
-        }
-    );
-});
-
-// ═══════════════════════════════════════════════════════
 // ANÚNCIOS / PROMOÇÕES BANNER (admin CRUD + público)
 // ═══════════════════════════════════════════════════════
 
@@ -1738,7 +1788,9 @@ app.get('/api/admin/pedidos/:id/itens', requireAdmin, (req, res) => {
 // ═══════════════════════════════════════════════════════
 
 // Garantir que a coluna custo existe na tabela produtos
-db.query('ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo DECIMAL(10,2) DEFAULT 0', () => {});
+db.query('ALTER TABLE produtos ADD COLUMN custo DECIMAL(10,2) DEFAULT 0', (err) => {
+    // Ignore ER_DUP_FIELDNAME — column already exists
+});
 
 app.get('/api/admin/lucratividade', requireAdmin, (req, res) => {
     db.query(
@@ -1772,7 +1824,9 @@ app.put('/api/admin/produtos/:id/custo', requireAdmin, (req, res) => {
 // ═══════════════════════════════════════════════════════
 // REVIEWS COM FOTO
 // ═══════════════════════════════════════════════════════
-db.query('ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL', () => {});
+db.query('ALTER TABLE avaliacoes ADD COLUMN foto TEXT DEFAULT NULL', (err) => {
+    // Ignore ER_DUP_FIELDNAME — column already exists
+});
 
 // ═══════════════════════════════════════════════════════
 // CAMPANHAS DE EMAIL (Marketing Automation)
@@ -1871,6 +1925,44 @@ setInterval(async () => {
         }
     } catch {}
 }, 60000);
+
+// ═══════════════════════════════════════════════════════
+// VOICE COMMAND — Admin voice control via Gemini
+// ═══════════════════════════════════════════════════════
+app.post('/api/admin/voice-command', requireAdmin, async (req, res) => {
+    const { command } = req.body;
+    if (!command) return res.status(400).json({ error: 'Comando vazio' });
+
+    const voicePrompt = [
+        {
+            role: 'user',
+            parts: [{ text: `Você é um assistente de voz de um painel administrativo de e-commerce. O admin falou: "${command}".
+Interprete e responda em JSON puro (sem markdown):
+{
+  "reply": "texto de resposta curto para o admin",
+  "action": "navigate|reload|none",
+  "tab": "dashboard|produtos|pedidos|estoque|cupons|despesas|avaliacoes|newsletter|campanhas|promocoes|banner|lucratividade|config|lixeira"
+}
+Tabs disponíveis: dashboard, produtos, pedidos, estoque, cupons, despesas, avaliacoes, newsletter, campanhas, promocoes, banner, lucratividade, config, lixeira.
+Se o admin pedir para ir a uma aba, use action "navigate" com o tab correto.
+Se pedir para atualizar/recarregar dados, use action "reload".
+Para outros comandos, use action "none" e dê uma resposta útil.
+Responda APENAS o JSON, sem crases ou formatação.` }]
+        }
+    ];
+
+    try {
+        if (!GEMINI_KEY) return res.json({ reply: 'Gemini não configurado', action: 'none' });
+        const result = await callGemini(voicePrompt);
+        if (result.error) return res.json({ reply: 'Não entendi o comando', action: 'none' });
+        const text = result.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(clean);
+        res.json(parsed);
+    } catch {
+        res.json({ reply: 'Não consegui interpretar o comando', action: 'none' });
+    }
+});
 
 // ═══════════════════════════════════════════════════════
 // SERVIDOR

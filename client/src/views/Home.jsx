@@ -77,42 +77,101 @@ function LazyImage({ src, alt, onClick }) {
 }
 
 // ═══════════════════════════════════════
-// PRODUCT CARD 3D — Listener no pai (sem flicker nas bordas)
+// PRODUCT CARD 3D — Slideshow on hover + 3D tilt
 // ═══════════════════════════════════════
-function ProductCard3D({ children, onClick }) {
+function ProductCard3D({ children, onClick, productId, imgCount, onSlidePause, onSlideResume }) {
   const wrapRef = useRef(null);
   const cardRef = useRef(null);
+  const intervalRef = useRef(null);
+  const [slideImages, setSlideImages] = useState([]);
+  const [slideIdx, setSlideIdx] = useState(0);
+  const [hovering, setHovering] = useState(false);
+  const imagesLoaded = useRef(false);
+  const pausedRef = useRef(false);
+
+  const startInterval = useCallback(() => {
+    if (intervalRef.current) return;
+    intervalRef.current = setInterval(() => {
+      if (!pausedRef.current) {
+        setSlideIdx(prev => (prev + 1) % Math.max(slideImages.length, 2));
+      }
+    }, 1500);
+  }, [slideImages.length]);
 
   const handleMouseMove = useCallback((e) => {
     const wrap = wrapRef.current;
     const card = cardRef.current;
     if (!wrap || !card) return;
     const rect = wrap.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;   // 0..1
-    const y = (e.clientY - rect.top) / rect.height;    // 0..1
-    // Clamp para dead-zone nas bordas (evita saltos)
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
     const cx = Math.max(0.05, Math.min(0.95, x));
     const cy = Math.max(0.05, Math.min(0.95, y));
     card.style.setProperty('--rx', `${(cy - 0.5) * -14}deg`);
     card.style.setProperty('--ry', `${(cx - 0.5) * 14}deg`);
   }, []);
 
+  const handleMouseEnter = useCallback(() => {
+    setHovering(true);
+    if (!imagesLoaded.current && imgCount > 0 && productId) {
+      imagesLoaded.current = true;
+      fetch(`${API_URL}/api/produtos/${productId}/imagens`)
+        .then(r => r.json())
+        .then(imgs => {
+          const urls = imgs.map(i => `${API_URL}/api/imagens/${i.id}/bin`);
+          if (urls.length > 0) {
+            const mainThumb = `${API_URL}/api/produtos/${productId}/thumb`;
+            setSlideImages([mainThumb, ...urls]);
+            urls.forEach(u => { const img = new Image(); img.src = u; });
+          }
+        })
+        .catch(() => {});
+    }
+    if (slideImages.length > 1 || imgCount > 0) {
+      startInterval();
+    }
+  }, [productId, imgCount, slideImages.length, startInterval]);
+
   const handleMouseLeave = useCallback(() => {
     const card = cardRef.current;
     if (!card) return;
     card.style.setProperty('--rx', '0deg');
     card.style.setProperty('--ry', '0deg');
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    pausedRef.current = false;
+    setHovering(false);
+    setSlideIdx(0);
   }, []);
+
+  const pauseSlide = useCallback(() => { pausedRef.current = true; }, []);
+  const resumeSlide = useCallback(() => { pausedRef.current = false; }, []);
+
+  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+
+  // Expose pause/resume on DOM element for child buttons
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (el) { el.__pauseSlide = pauseSlide; el.__resumeSlide = resumeSlide; }
+  }, [pauseSlide, resumeSlide]);
 
   return (
     <div
       ref={wrapRef}
       className="product-card-3d-wrap"
       onMouseMove={handleMouseMove}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
     >
       <div ref={cardRef} className="product-card-3d">
+        {slideImages.length > 1 && hovering && (
+          <div className="card-slideshow-overlay">
+            {slideImages.map((src, i) => (
+              <img key={src} src={src} alt="" loading="lazy" draggable={false}
+                className={i === (slideIdx % slideImages.length) ? 'slide-active' : ''} />
+            ))}
+          </div>
+        )}
         {children}
       </div>
     </div>
@@ -315,6 +374,13 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+  const [pinchScale, setPinchScale] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const pinchStartDist = useRef(0);
+  const pinchStartScale = useRef(1);
+  const panStart = useRef({ x: 0, y: 0 });
+  const panStartOffset = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
   const modalWrapRef = useRef(null);
   const modalImgRef = useRef(null);
   const [reviews, setReviews] = useState([]);
@@ -402,6 +468,45 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
       el.style.setProperty('--ry', '0deg');
     }
   };
+
+  // Touch pinch-to-zoom handlers
+  const getTouchDist = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = useCallback((e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchStartDist.current = getTouchDist(e.touches);
+      pinchStartScale.current = pinchScale;
+    } else if (e.touches.length === 1 && pinchScale > 1) {
+      isPanning.current = true;
+      panStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      panStartOffset.current = { ...panOffset };
+    }
+  }, [pinchScale, panOffset]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = getTouchDist(e.touches);
+      if (pinchStartDist.current === 0) return;
+      const newScale = Math.max(1, Math.min(4, pinchStartScale.current * (dist / pinchStartDist.current)));
+      setPinchScale(newScale);
+      if (newScale <= 1) setPanOffset({ x: 0, y: 0 });
+    } else if (e.touches.length === 1 && isPanning.current && pinchScale > 1) {
+      const dx = e.touches[0].clientX - panStart.current.x;
+      const dy = e.touches[0].clientY - panStart.current.y;
+      setPanOffset({ x: panStartOffset.current.x + dx, y: panStartOffset.current.y + dy });
+    }
+  }, [pinchScale]);
+
+  const handleTouchEnd = useCallback(() => {
+    isPanning.current = false;
+    if (pinchScale <= 1.1) { setPinchScale(1); setPanOffset({ x: 0, y: 0 }); }
+  }, [pinchScale]);
 
   // Share (C2)
   const shareUrl = `${window.location.origin}/?produto=${produto.id}`;
@@ -511,11 +616,19 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeaveModal}
             onClick={() => setZoomed(z => !z)}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             <div
               ref={modalImgRef}
               className={`modal-zoom-container ${zoomed ? 'zoomed' : 'modal-3d'}`}
-              style={zoomed ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` } : undefined}
+              style={zoomed
+                ? { '--zoom-x': `${zoomPos.x}%`, '--zoom-y': `${zoomPos.y}%` }
+                : pinchScale > 1
+                  ? { transform: `scale(${pinchScale}) translate(${panOffset.x / pinchScale}px, ${panOffset.y / pinchScale}px)`, transition: 'none' }
+                  : undefined
+              }
             >
               <AnimatePresence mode="wait">
                 {allImages[currentImgIdx]?.startsWith('data:video/') ? (
@@ -698,7 +811,7 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 // ═══════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════
-function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente = null }) {
+function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente = null, priceRange = [0, 999] }) {
   const { t } = useI18n();
   const [allProdutos, setAllProdutos] = useState(() => {
     try {
@@ -803,8 +916,14 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
       const q = displayFilter.query.toLowerCase().trim();
       filtered = filtered.filter(p => p.nome.toLowerCase().includes(q) || p.liga.toLowerCase().includes(q));
     }
+    if (priceRange[0] > 0 || priceRange[1] < 999) {
+      filtered = filtered.filter(p => {
+        const price = parseFloat(p.preco);
+        return price >= priceRange[0] && (priceRange[1] >= 999 || price <= priceRange[1]);
+      });
+    }
     return filtered;
-  }, [displayFilter, allProdutos]);
+  }, [displayFilter, allProdutos, priceRange]);
 
   const handleClique = useCallback((produto) => {
     fetch(`${API_URL}/api/clique/${produto.id}`, { method: 'POST' }).catch(() => {});
@@ -843,7 +962,7 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
               className={`product-item ${produto.destaque ? 'item-destaque' : ''} ${allSizesOut ? 'item-esgotado' : ''}`}
               style={{ '--i': Math.min(index, 11) }}>
 
-              <ProductCard3D onClick={() => handleClique(produto)}>
+              <ProductCard3D onClick={() => handleClique(produto)} productId={produto.id} imgCount={produto.imgCount || 0}>
                 <LazyImage src={`${API_URL}/api/produtos/${produto.id}/thumb`} alt={produto.nome} />
 
               {/* Badges */}
@@ -859,10 +978,20 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
                 <span className="badge-estoque-baixo"><AlertTriangle size={9} /> úItimas {minStock} und.</span>
               )}
 
-              {/* Favorite heart (C1) */}
+              {/* Favorite heart */}
               <button className={`card-fav-btn ${isFav ? 'active' : ''}`}
+                onMouseEnter={(e) => { const wrap = e.currentTarget.closest('.product-card-3d-wrap'); if (wrap?.__pauseSlide) wrap.__pauseSlide(); }}
+                onMouseLeave={(e) => { const wrap = e.currentTarget.closest('.product-card-3d-wrap'); if (wrap?.__resumeSlide) wrap.__resumeSlide(); }}
                 onClick={(e) => { e.stopPropagation(); toggleFavorite(produto.id); }}>
                 <Heart size={16} fill={isFav ? '#fff' : 'none'} />
+              </button>
+
+              {/* Cart button below wishlist */}
+              <button className="card-cart-btn" disabled={allSizesOut}
+                onMouseEnter={(e) => { const wrap = e.currentTarget.closest('.product-card-3d-wrap'); if (wrap?.__pauseSlide) wrap.__pauseSlide(); }}
+                onMouseLeave={(e) => { const wrap = e.currentTarget.closest('.product-card-3d-wrap'); if (wrap?.__resumeSlide) wrap.__resumeSlide(); }}
+                onClick={(e) => { e.stopPropagation(); if (!allSizesOut) handleClique(produto); }}>
+                <ShoppingBag size={16} />
               </button>
 
               <div className="product-info">
@@ -877,11 +1006,6 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
                 ) : (
                   <p className="preco">R$ {preco.toFixed(2)}</p>
                 )}
-
-                <button className="add-to-cart-btn" disabled={allSizesOut}
-                  onClick={(e) => { e.stopPropagation(); if (!allSizesOut) handleClique(produto); }}>
-                  {allSizesOut ? t('home.sold_out') : t('home.add_to_cart')}
-                </button>
               </div>
               </ProductCard3D>
             </div>

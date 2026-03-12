@@ -651,22 +651,36 @@ function matchFallbackKey(userText) {
 function ChatBot() {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      text: null // will be set by effect
-    }
-  ]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('rw_chat_msgs');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [{ role: 'assistant', text: null }];
+  });
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
   const [aiFailed, setAiFailed] = useState(false);
   const [showMoreQuick, setShowMoreQuick] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const voiceRecRef = useRef(null);
 
-  // Set initial greeting based on language
+  // Set initial greeting based on language (only if no saved messages)
   useEffect(() => {
-    setMessages([{ role: 'assistant', text: t('chatbot.greeting') }]);
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].text === null) return [{ role: 'assistant', text: t('chatbot.greeting') }];
+      return prev;
+    });
   }, [t]);
+
+  // Persist messages to sessionStorage
+  useEffect(() => {
+    if (messages.length > 0 && messages[0].text !== null) {
+      sessionStorage.setItem('rw_chat_msgs', JSON.stringify(messages.slice(-50)));
+    }
+  }, [messages]);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -690,12 +704,52 @@ function ChatBot() {
     }
   }, [messages, isTyping]);
 
+  // Scroll detection for scroll-to-bottom button
+  useEffect(() => {
+    const body = chatBodyRef.current;
+    if (!body) return;
+    const handleScroll = () => {
+      const distFromBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
+      setShowScrollBtn(distFromBottom > 120);
+    };
+    body.addEventListener('scroll', handleScroll);
+    return () => body.removeEventListener('scroll', handleScroll);
+  }, [isOpen]);
+
   // Focar no input ao abrir
   useEffect(() => {
     if (isOpen && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [isOpen]);
+
+  // Voice input
+  const toggleVoice = useCallback(() => {
+    if (voiceListening) {
+      voiceRecRef.current?.stop();
+      setVoiceListening(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.continuous = false;
+    rec.interimResults = false;
+    voiceRecRef.current = rec;
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setInput(text);
+    };
+    rec.onerror = () => setVoiceListening(false);
+    rec.onend = () => setVoiceListening(false);
+    setVoiceListening(true);
+    rec.start();
+  }, [voiceListening]);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   // Construir histórico no formato Gemini
   const buildGeminiMessages = useCallback((userMessage) => {
@@ -769,7 +823,7 @@ function ChatBot() {
     }
   }, [input, isTyping, buildGeminiMessages]);
 
-  // Enter para enviar
+  // Enter para enviar (shift+enter = nova linha)
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -795,6 +849,7 @@ function ChatBot() {
     ]);
     setInput('');
     setIsTyping(false);
+    sessionStorage.removeItem('rw_chat_msgs');
   }, [t]);
 
   // Sugestões rápidas
@@ -960,6 +1015,13 @@ function ChatBot() {
 
             <div ref={messagesEndRef} />
 
+            {/* Scroll to bottom button */}
+            {showScrollBtn && (
+              <button className="chat-scroll-bottom" onClick={scrollToBottom} aria-label="Rolar para baixo">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+            )}
+
             {/* Quick actions — mostra sempre que não estiver digitando */}
             {!isTyping && (
               <div className="chat-quick-actions">
@@ -994,9 +1056,22 @@ function ChatBot() {
           {/* Footer — Input */}
           <div className="chatbot-footer">
             <div className="chatbot-input-wrap">
-              <input
+              {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+                <button
+                  className={`chatbot-voice-btn ${voiceListening ? 'active' : ''}`}
+                  onClick={toggleVoice}
+                  aria-label="Entrada por voz"
+                  title="Falar"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                </button>
+              )}
+              <textarea
                 ref={inputRef}
-                type="text"
                 className="chatbot-input"
                 placeholder={t('chatbot.input_placeholder')}
                 value={input}
@@ -1004,6 +1079,8 @@ function ChatBot() {
                 onKeyDown={handleKeyDown}
                 disabled={isTyping}
                 maxLength={500}
+                rows={1}
+                style={{ resize: 'none', height: Math.min(80, Math.max(32, input.split('\n').length * 20)) }}
               />
               <button
                 className="chatbot-send"

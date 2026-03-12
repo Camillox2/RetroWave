@@ -441,6 +441,17 @@
   /* Charts stack */
   .dashboard-charts { grid-template-columns: 1fr; }
 
+  /* Admin sidebar on mobile */
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar { width: 100% !important; min-height: auto; flex-direction: row; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); padding: 8px 0; overflow-x: auto; }
+  .admin-sidebar.collapsed { width: 100% !important; }
+  .sidebar-nav { flex-direction: row; overflow-x: auto; padding: 0 8px; }
+  .sidebar-item { padding: 6px 10px; font-size: 0.48rem; white-space: nowrap; }
+  .sidebar-item.active { border-right: none; border-bottom: 2px solid var(--text-color); }
+  .sidebar-toggle { display: none; }
+  .admin-main { padding: 16px; }
+  .voice-feedback { font-size: 0.5rem; padding: 6px 10px; }
+
   /* Admin tabs scrollable on mobile */
   .admin-tabs { gap: 16px; }
   .admin-tab { font-size: 0.5rem; letter-spacing: 1.5px; padding: 10px 0; }

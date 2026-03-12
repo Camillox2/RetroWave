@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail, Bell, BellRing, TrendingUp, DollarSign, ChevronDown, ChevronRight, Send, Camera, Package, Sparkles } from 'lucide-react';
+import { LogOut, Plus, Pencil, Trash2, ChevronLeft, Upload, Star, ArrowUp, ArrowDown, Image, Eye, EyeOff, Pin, Percent, Calendar, Settings, Megaphone, ShoppingBag, Search, Copy, Download, Check as CheckIcon, Tag, MessageSquare, GripVertical, Filter, Mail, Bell, BellRing, TrendingUp, DollarSign, ChevronDown, ChevronRight, Send, Camera, Package, Sparkles, LayoutDashboard, Box, ImageIcon, Sliders, Receipt, ClipboardList, TicketPercent, MessageCircle, Users, AlertTriangle, Zap, BarChart3, Mic, MicOff, PanelLeftClose, PanelLeft, Trash } from 'lucide-react';
 import { AreaChart, Area, BarChart as RChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 import { API_URL } from '../config';
 
-const LIGAS = ['BUNDESLIGA', 'LIGA PORTUGUESA', 'LIGUE 1', 'BRASILEIRÃO', 'SERIE A'];
+const LIGAS = ['BUNDESLIGA', 'LIGA PORTUGUESA', 'LIGUE ONE FRANÇA', 'SERIE A BRASILEIRÃO', 'SERIE A ITALIA'];
 const PRODUCTS_PER_PAGE = 20;
 
 // ═══════════════════════════════════════
@@ -444,6 +444,34 @@ function AdminDashboard() {
   const [novaCampanha, setNovaCampanha] = useState({ assunto: '', conteudo: '', agendado_para: '' });
   const [campanhasLoaded, setCampanhasLoaded] = useState(false);
 
+  // Sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const SIDEBAR_TABS = [
+    { key: 'dashboard', label: 'PAINEL', icon: LayoutDashboard },
+    { key: 'produtos', label: 'PRODUTOS', icon: Box },
+    { key: 'pedidos', label: 'PEDIDOS', icon: ClipboardList },
+    { key: 'estoque', label: 'ESTOQUE', icon: AlertTriangle },
+    { key: 'cupons', label: 'CUPONS', icon: TicketPercent },
+    { key: 'despesas', label: 'DESPESAS', icon: Receipt },
+    { key: 'avaliacoes', label: 'REVIEWS', icon: MessageCircle },
+    { key: 'newsletter', label: 'NEWSLETTER', icon: Users },
+    { key: 'campanhas', label: 'CAMPANHAS', icon: Send },
+    { key: 'promocoes', label: 'PROMOÇÕES', icon: Zap },
+    { key: 'banner', label: 'BANNER', icon: ImageIcon },
+    { key: 'lucratividade', label: 'LUCRO', icon: BarChart3 },
+    { key: 'config', label: 'CONFIG', icon: Sliders },
+    { key: 'lixeira', label: 'LIXEIRA', icon: Trash },
+  ];
+
+  // Voice command
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [voiceResult, setVoiceResult] = useState('');
+  const recognitionRef = useRef(null);
+
+  // Soft-delete (lixeira)
+  const [deletedProducts, setDeletedProducts] = useState([]);
+
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
@@ -536,12 +564,12 @@ function AdminDashboard() {
     }
     if (tab === 'despesas' || tab === 'dashboard') {
       if (force || !loaded.despesas) {
-        adminFetch(`${API_URL}/api/admin/despesas`).then(r => r.json()).then(d => { setDespesas(d); loaded.despesas = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/despesas`).then(r => r.json()).then(d => { setDespesas(Array.isArray(d) ? d : []); loaded.despesas = true; }).catch(() => {});
       }
     }
     if (tab === 'pedidos' || tab === 'dashboard') {
       if (force || !loaded.pedidos) {
-        adminFetch(`${API_URL}/api/admin/pedidos`).then(r => r.json()).then(d => { setPedidos(d); loaded.pedidos = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/pedidos`).then(r => r.json()).then(d => { setPedidos(Array.isArray(d) ? d : []); loaded.pedidos = true; }).catch(() => {});
       }
     }
     if (tab === 'banner' || tab === 'config') {
@@ -551,12 +579,12 @@ function AdminDashboard() {
     }
     if (tab === 'cupons') {
       if (force || !loaded.cupons) {
-        adminFetch(`${API_URL}/api/admin/cupons`).then(r => r.json()).then(d => { setCupons(d); loaded.cupons = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/cupons`).then(r => r.json()).then(d => { setCupons(Array.isArray(d) ? d : []); loaded.cupons = true; }).catch(() => {});
       }
     }
     if (tab === 'avaliacoes') {
       if (force || !loaded.avaliacoes) {
-        adminFetch(`${API_URL}/api/admin/avaliacoes`).then(r => r.json()).then(d => { setAvaliacoes(d); loaded.avaliacoes = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/avaliacoes`).then(r => r.json()).then(d => { setAvaliacoes(Array.isArray(d) ? d : []); loaded.avaliacoes = true; }).catch(() => {});
       }
     }
     if (tab === 'dashboard') {
@@ -566,7 +594,7 @@ function AdminDashboard() {
     }
     if (tab === 'newsletter') {
       if (force || !loaded.newsletter) {
-        adminFetch(`${API_URL}/api/admin/newsletter`).then(r => r.json()).then(d => { setNlSubscribers(d); loaded.newsletter = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/newsletter`).then(r => r.json()).then(d => { setNlSubscribers(Array.isArray(d) ? d : []); loaded.newsletter = true; }).catch(() => {});
       }
     }
     if (tab === 'estoque') {
@@ -576,7 +604,7 @@ function AdminDashboard() {
     }
     if (tab === 'promocoes') {
       if (force || !loaded.anuncios) {
-        adminFetch(`${API_URL}/api/admin/anuncios`).then(r => r.json()).then(d => { setAnuncios(d); loaded.anuncios = true; }).catch(() => {});
+        adminFetch(`${API_URL}/api/admin/anuncios`).then(r => r.json()).then(d => { setAnuncios(Array.isArray(d) ? d : []); loaded.anuncios = true; }).catch(() => {});
       }
     }
     if (tab === 'lucratividade') {
@@ -589,7 +617,85 @@ function AdminDashboard() {
         adminFetch(`${API_URL}/api/admin/campanhas`).then(r => r.json()).then(d => { setCampanhas(Array.isArray(d) ? d : []); setCampanhasLoaded(true); }).catch(() => {});
       }
     }
+    if (tab === 'lixeira') {
+      adminFetch(`${API_URL}/api/admin/produtos/lixeira`).then(r => r.json()).then(d => { setDeletedProducts(Array.isArray(d) ? d : []); }).catch(() => {});
+    }
   };
+
+  // ═══════════════════════════════════════
+  // VOICE COMMANDS — Web Speech API + Gemini
+  // ═══════════════════════════════════════
+  const startVoice = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast('Navegador não suporta reconhecimento de voz'); return; }
+    const recog = new SR();
+    recog.lang = 'pt-BR';
+    recog.continuous = false;
+    recog.interimResults = true;
+    recognitionRef.current = recog;
+
+    recog.onresult = (e) => {
+      const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+      setVoiceText(transcript);
+      if (e.results[0].isFinal) {
+        processVoiceCommand(transcript);
+      }
+    };
+    recog.onerror = () => { setVoiceActive(false); setVoiceText(''); };
+    recog.onend = () => { setVoiceActive(false); };
+    setVoiceActive(true);
+    setVoiceText('');
+    setVoiceResult('');
+    recog.start();
+  }, []);
+
+  const stopVoice = useCallback(() => {
+    recognitionRef.current?.stop();
+    setVoiceActive(false);
+  }, []);
+
+  const processVoiceCommand = useCallback(async (text) => {
+    setVoiceResult('Processando...');
+    try {
+      const res = await adminFetch(`${API_URL}/api/admin/voice-command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: text })
+      });
+      const data = await res.json();
+      setVoiceResult(data.reply || data.error || 'Comando executado');
+      if (data.action === 'navigate') setActiveTab(data.tab);
+      if (data.action === 'reload') loadData(activeTab, true);
+      showToast(data.reply || 'Comando processado');
+    } catch {
+      setVoiceResult('Erro ao processar comando');
+    }
+  }, [activeTab]);
+
+  // ── EXPORT CSV / PDF ──
+  const exportCSV = useCallback((data, name, columns) => {
+    const BOM = '\uFEFF';
+    const header = columns.map(c => c.label).join(';');
+    const rows = data.map(row => columns.map(c => {
+      const val = c.getter ? c.getter(row) : (row[c.key] ?? '');
+      return String(val).replace(/;/g, ',').replace(/\n/g, ' ');
+    }).join(';'));
+    const blob = new Blob([BOM + header + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${name}_retrowave.csv`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exportado!');
+  }, []);
+
+  const exportPDF = useCallback((data, name, columns, title) => {
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Permita popups para exportar PDF'); return; }
+    const rows = data.map(row => `<tr>${columns.map(c => `<td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${c.getter ? c.getter(row) : (row[c.key] ?? '')}</td>`).join('')}</tr>`).join('');
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:20px}table{border-collapse:collapse;width:100%}th{background:#222;color:#fff;padding:6px 8px;font-size:11px;text-align:left}td{font-size:11px}h1{font-size:16px;letter-spacing:2px}</style></head><body><h1>${title}</h1><p style="font-size:11px;color:#666">Gerado em ${new Date().toLocaleString('pt-BR')} — Retro Wave</p><table><thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>{window.print()},500)<\/script></body></html>`);
+    w.document.close();
+    showToast('PDF gerado!');
+  }, []);
 
   // ── PRODUCT EDITOR ──
   const openProductEditor = async (produtoId) => {
@@ -1247,7 +1353,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                   >
                     <span className="editor-gallery-grip"><GripVertical size={14} /></span>
                     <span className="editor-gallery-order">{i + 1}</span>
-                    {img.imagem?.startsWith('data:video/') || img.imagem?.includes('/api/imagens/') && img._tipo === 'video' ? (
+                    {(img.imagem?.startsWith('data:video/') || (img.imagem?.includes('/api/imagens/') && img._tipo === 'video')) ? (
                       <video src={img.imagem} muted style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 2 }} />
                     ) : (
                       <img src={img.imagem} alt={`Mídia ${i + 1}`} />
@@ -1597,6 +1703,14 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
         <div className="dashboard-header">
           <h1>DASHBOARD</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Voice Command Button */}
+            <button
+              className={`voice-cmd-btn ${voiceActive ? 'active' : ''}`}
+              onClick={voiceActive ? stopVoice : startVoice}
+              title="Comando de voz"
+            >
+              {voiceActive ? <MicOff size={15} /> : <Mic size={15} />}
+            </button>
             {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
               <button
@@ -1648,13 +1762,14 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
           </div>
         </div>
 
-        <div className="admin-tabs" style={{ display: 'none' }}>
-          {['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes'].map(tab => (
-            <button key={tab} className={`admin-tab ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); setVisibleCount(PRODUCTS_PER_PAGE); setSelectedIds(new Set()); setBatchMode(false); }}>
-              {tab === 'avaliacoes' ? 'REVIEWS' : tab.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        {/* Voice command feedback */}
+        {(voiceActive || voiceResult) && (
+          <div className="voice-feedback">
+            {voiceActive && <span className="voice-pulse" />}
+            {voiceActive && <span className="voice-text">{voiceText || 'Ouvindo...'}</span>}
+            {voiceResult && <span className="voice-result">{voiceResult}</span>}
+          </div>
+        )}
 
         {activeTab === 'dashboard' && (
           <>
@@ -2434,6 +2549,7 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
                         )}
                         {' '}
                         <button className="action-btn delete" onClick={async () => {
+                          if (!window.confirm(`Deletar campanha "${c.assunto}"?`)) return;
                           await adminFetch(`${API_URL}/api/admin/campanhas/${c.id}`, { method: 'DELETE' });
                           showToast('Campanha deletada');
                           loadData('campanhas', true);
@@ -2447,7 +2563,55 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
             </div>
           </div>
         )}
-      </div>
+
+        {/* LIXEIRA TAB */}
+        {activeTab === 'lixeira' && (
+          <div>
+            <h3 style={{ fontSize: '0.75rem', letterSpacing: 3, marginBottom: 20 }}><Trash size={14} /> LIXEIRA — PRODUTOS REMOVIDOS</h3>
+            {deletedProducts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60, opacity: 0.3 }}>
+                <Trash size={40} strokeWidth={1} />
+                <p style={{ marginTop: 12, fontSize: '0.6rem', letterSpacing: 2 }}>LIXEIRA VAZIA</p>
+              </div>
+            ) : (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead><tr><th>ID</th><th>NOME</th><th>LIGA</th><th>PREÇO</th><th>AÇÕES</th></tr></thead>
+                  <tbody>
+                    {deletedProducts.map(p => (
+                      <tr key={p.id}>
+                        <td>#{p.id}</td>
+                        <td>{p.nome}</td>
+                        <td>{p.liga}</td>
+                        <td>R$ {parseFloat(p.preco).toFixed(2)}</td>
+                        <td>
+                          <button className="action-btn" onClick={async () => {
+                            try {
+                              const res = await adminFetch(`${API_URL}/api/admin/produtos/${p.id}/restore`, { method: 'PUT' });
+                              const d = await res.json();
+                              if (d.success) { showToast('Produto restaurado!'); loadData('lixeira', true); loadData('produtos', true); }
+                            } catch { showToast('Erro ao restaurar'); }
+                          }}>RESTAURAR</button>
+                          {' '}
+                          <button className="action-btn delete" onClick={async () => {
+                            if (!window.confirm('Deletar permanentemente? Esta ação não pode ser desfeita.')) return;
+                            try {
+                              const res = await adminFetch(`${API_URL}/api/admin/produtos/${p.id}/permanent`, { method: 'DELETE' });
+                              const d = await res.json();
+                              if (d.success) { showToast('Produto deletado permanentemente'); loadData('lixeira', true); }
+                            } catch { showToast('Erro ao deletar'); }
+                          }}>DELETAR PERMANENTE</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>{/* close dashboard-container */}
     </motion.div>
   );
 }
