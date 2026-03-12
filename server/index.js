@@ -9,29 +9,25 @@ const sharp = require('sharp');
 const THUMB_CACHE_DIR = path.join(__dirname, 'cache', 'thumbs');
 if (!fs.existsSync(THUMB_CACHE_DIR)) fs.mkdirSync(THUMB_CACHE_DIR, { recursive: true });
 
-async function serveWebP(res, base64, cacheKey) {
+async function serveWebP(res, base64, cacheKey, width = 280) {
     const cachePath = path.join(THUMB_CACHE_DIR, `${cacheKey}.webp`);
-    // Retorna do cache se existir
     if (fs.existsSync(cachePath)) {
-        const etag = `"${cacheKey}"`;
         res.set('Content-Type', 'image/webp');
         res.set('Cache-Control', 'public, max-age=604800, immutable');
-        res.set('ETag', etag);
+        res.set('ETag', `"${cacheKey}"`);
         return res.sendFile(cachePath);
     }
-    // Converte base64 → WebP e salva no cache
     const matches = base64.match(/^data:(.+);base64,(.+)$/);
     if (!matches) return res.status(400).send('');
     const buffer = Buffer.from(matches[2], 'base64');
     try {
-        const webp = await sharp(buffer).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+        const webp = await sharp(buffer).resize(width, null, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }).toBuffer();
         fs.writeFileSync(cachePath, webp);
         res.set('Content-Type', 'image/webp');
         res.set('Cache-Control', 'public, max-age=604800, immutable');
         res.set('ETag', `"${cacheKey}"`);
         res.send(webp);
     } catch {
-        // Fallback: serve original se sharp falhar
         res.set('Content-Type', matches[1]);
         res.set('Cache-Control', 'public, max-age=3600');
         res.send(buffer);
@@ -316,58 +312,70 @@ app.get('/api/banner-image', (req, res) => {
     db.query("SELECT valor FROM site_config WHERE chave = 'banner_imagem'", (err, rows) => {
         if (err || !rows.length || !rows[0].valor) return res.status(404).send('');
         const val = rows[0].valor;
-        if (val.startsWith('/uploads/')) return res.redirect(val);
-        serveWebP(res, val, 'banner').catch(() => res.status(500).send(''));
+        if (val.startsWith('/uploads/')) {
+            const filePath = path.join(__dirname, 'public', val);
+            return res.sendFile(filePath, err2 => { if (err2) res.status(404).send(''); });
+        }
+        serveWebP(res, val, 'banner', 1200).catch(() => res.status(500).send(''));
     });
 });
 
 app.get('/api/produtos', (req, res) => {
     const { liga, q } = req.query;
-    let sql = `SELECT p.id, p.nome, p.liga, p.preco, p.descricao, p.cliques, p.vendas, p.created_at,
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(40, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const minPrice = parseFloat(req.query.min_price) || 0;
+    const maxPrice = parseFloat(req.query.max_price) || 0;
+
+    const conditions = [];
+    const params = [];
+
+    if (liga)      { conditions.push('p.liga = ?');                        params.push(liga); }
+    if (q)         { conditions.push('(p.nome LIKE ? OR p.liga LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+    if (minPrice)  { conditions.push('p.preco >= ?');                      params.push(minPrice); }
+    if (maxPrice)  { conditions.push('p.preco <= ?');                      params.push(maxPrice); }
+
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+
+    // Busca total e página em paralelo
+    const sqlCount = `SELECT COUNT(DISTINCT p.id) as total FROM produtos p${where}`;
+    const sqlData  = `SELECT p.id, p.nome, p.liga, p.preco, p.descricao, p.cliques, p.vendas, p.created_at,
                p.destaque, p.promo_desconto, p.promo_tipo, p.promo_inicio, p.promo_fim,
                p.estoque_p, p.estoque_m, p.estoque_g, p.estoque_gg,
                COUNT(pi.id) as imgCount
                FROM produtos p
-               LEFT JOIN produto_imagens pi ON pi.produto_id = p.id`;
-    const params = [];
-    const conditions = [];
+               LEFT JOIN produto_imagens pi ON pi.produto_id = p.id
+               ${where}
+               GROUP BY p.id ORDER BY p.destaque DESC, p.id DESC
+               LIMIT ? OFFSET ?`;
 
-    if (liga) {
-        conditions.push('p.liga = ?');
-        params.push(liga);
-    }
-    if (q) {
-        conditions.push('(p.nome LIKE ? OR p.liga LIKE ?)');
-        params.push(`%${q}%`, `%${q}%`);
-    }
-
-    if (conditions.length > 0) {
-        sql += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    sql += ' GROUP BY p.id ORDER BY p.destaque DESC, p.id DESC';
-
-    db.query(sql, params, (err, produtos) => {
+    db.query(sqlCount, params, (err, countRows) => {
         if (err) return res.status(500).json({ error: 'Erro ao buscar produtos' });
-        // Filtrar promoções ativas e calcular preço com desconto
-        const now = new Date().toISOString().split('T')[0];
-        const result = produtos.map(p => {
-            const promo = p.promo_desconto && p.promo_inicio && p.promo_fim &&
-                          p.promo_inicio <= now && p.promo_fim >= now;
-            let precoFinal = parseFloat(p.preco);
-            let promoLabel = null;
-            if (promo) {
-                if (p.promo_tipo === 'porcentagem') {
-                    precoFinal = precoFinal * (1 - parseFloat(p.promo_desconto) / 100);
-                    promoLabel = `-${parseFloat(p.promo_desconto).toFixed(0)}%`;
-                } else {
-                    precoFinal = precoFinal - parseFloat(p.promo_desconto);
-                    promoLabel = `-R$${parseFloat(p.promo_desconto).toFixed(0)}`;
+        const total = countRows[0]?.total || 0;
+        const hasMore = offset + limit < total;
+
+        db.query(sqlData, [...params, limit, offset], (err2, produtos) => {
+            if (err2) return res.status(500).json({ error: 'Erro ao buscar produtos' });
+            const now = new Date().toISOString().split('T')[0];
+            const result = produtos.map(p => {
+                const promo = p.promo_desconto && p.promo_inicio && p.promo_fim &&
+                              p.promo_inicio <= now && p.promo_fim >= now;
+                let precoFinal = parseFloat(p.preco);
+                let promoLabel = null;
+                if (promo) {
+                    if (p.promo_tipo === 'porcentagem') {
+                        precoFinal = precoFinal * (1 - parseFloat(p.promo_desconto) / 100);
+                        promoLabel = `-${parseFloat(p.promo_desconto).toFixed(0)}%`;
+                    } else {
+                        precoFinal = precoFinal - parseFloat(p.promo_desconto);
+                        promoLabel = `-R$${parseFloat(p.promo_desconto).toFixed(0)}`;
+                    }
                 }
-            }
-            return { ...p, promoAtiva: !!promo, precoFinal: precoFinal.toFixed(2), promoLabel };
+                return { ...p, promoAtiva: !!promo, precoFinal: precoFinal.toFixed(2), promoLabel };
+            });
+            res.json({ produtos: result, hasMore, page, total });
         });
-        res.json(result);
     });
 });
 
@@ -385,22 +393,26 @@ app.get('/api/produtos/:id/imagens', (req, res) => {
     );
 });
 
-// Servir imagem extra (URL estática ou base64 legado)
+// Servir imagem extra (arquivo em disco ou base64 legado)
 app.get('/api/imagens/:imgId/bin', (req, res) => {
     db.query('SELECT imagem FROM produto_imagens WHERE id = ?', [req.params.imgId], (err, rows) => {
         if (err || !rows.length || !rows[0].imagem) return res.status(404).send('');
         const img = rows[0].imagem;
-        if (img.startsWith('/uploads/')) return res.redirect(img);
+        if (img.startsWith('/uploads/')) {
+            return res.sendFile(path.join(__dirname, 'public', img), err2 => { if (err2) res.status(404).send(''); });
+        }
         serveWebP(res, img, `extra-${req.params.imgId}`).catch(() => res.status(500).send(''));
     });
 });
 
-// Thumbnail de produto (URL estática ou base64 legado)
+// Thumbnail de produto (arquivo em disco ou base64 legado)
 app.get('/api/produtos/:id/thumb', (req, res) => {
     db.query('SELECT imagem FROM produtos WHERE id = ?', [req.params.id], (err, rows) => {
         if (err || !rows.length || !rows[0].imagem) return res.status(404).send('');
         const img = rows[0].imagem;
-        if (img.startsWith('/uploads/')) return res.redirect(img);
+        if (img.startsWith('/uploads/')) {
+            return res.sendFile(path.join(__dirname, 'public', img), err2 => { if (err2) res.status(404).send(''); });
+        }
         serveWebP(res, img, `thumb-${req.params.id}`).catch(() => res.status(500).send(''));
     });
 });

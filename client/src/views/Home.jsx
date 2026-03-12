@@ -31,10 +31,8 @@ function PromoCountdown({ fim }) {
   if (!timeLeft) return null;
   return <span className="promo-countdown">⏱ {timeLeft}</span>;
 }
-const CACHE_KEY = 'retrowave_produtos_v3';
-const CACHE_TS_KEY = 'retrowave_produtos_v3_ts';
-const CACHE_TTL = 10 * 60 * 1000;
 const FAV_KEY = 'retrowave_favoritos';
+const PAGE_LIMIT = 20;
 
 // ═══════════════════════════════════════
 // LAZY IMAGE — IntersectionObserver + Shimmer
@@ -122,7 +120,8 @@ function ProductCard3D({ children, onClick, productId, imgCount, onSlidePause, o
           if (urls.length > 0) {
             const mainThumb = `${API_URL}/api/produtos/${productId}/thumb`;
             setSlideImages([mainThumb, ...urls]);
-            urls.forEach(u => { const img = new Image(); img.src = u; });
+            // Pré-carregar apenas a primeira imagem extra (não todas)
+            if (urls[0]) { const img = new Image(); img.src = urls[0]; }
           }
         })
         .catch(() => {});
@@ -813,18 +812,12 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
 // ═══════════════════════════════════════
 function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente = null, priceRange = [0, 999] }) {
   const { t } = useI18n();
-  const [allProdutos, setAllProdutos] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem(CACHE_KEY);
-      const ts = sessionStorage.getItem(CACHE_TS_KEY);
-      if (cached && ts && (Date.now() - Number(ts)) < CACHE_TTL) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  });
-  const [loading, setLoading] = useState(allProdutos.length === 0);
+  const [produtos, setProdutos] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const sentinelRef = useRef(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [siteConfig, setSiteConfig] = useState(null);
 
@@ -880,50 +873,70 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
     fetch(`${API_URL}/api/config`).then(r => r.json()).then(setSiteConfig).catch(() => {});
   }, []);
 
+  const fetchPage = useCallback(async (pageNum, liga, query, pr, reset = false) => {
+    const params = new URLSearchParams({ page: pageNum, limit: PAGE_LIMIT });
+    if (liga) params.set('liga', liga);
+    if (query.trim()) params.set('q', query.trim());
+    if (pr[0] > 0) params.set('min_price', pr[0]);
+    if (pr[1] < 999) params.set('max_price', pr[1]);
+    try {
+      const res = await fetch(`${API_URL}/api/produtos?${params}`);
+      const data = await res.json();
+      const arr = Array.isArray(data.produtos) ? data.produtos : [];
+      setProdutos(prev => reset ? arr : [...prev, ...arr]);
+      setHasMore(!!data.hasMore);
+    } catch (e) {
+      console.error('Erro ao carregar produtos:', e);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
+  // Carregamento inicial e reload forçado
   useEffect(() => {
-    if (allProdutos.length > 0 && forceReload === lastReload.current) { setLoading(false); return; }
     lastReload.current = forceReload;
-    fetch(`${API_URL}/api/produtos`)
-      .then(res => res.json())
-      .then(data => {
-        const arr = Array.isArray(data) ? data : [];
-        setAllProdutos(arr);
-        setLoading(false);
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(arr)); sessionStorage.setItem(CACHE_TS_KEY, String(Date.now())); } catch {}
-      })
-      .catch(err => { console.error('Erro ao carregar produtos:', err); if (allProdutos.length === 0) setAllProdutos([]); setLoading(false); });
+    setLoading(true);
+    setPage(1);
+    fetchPage(1, ligaAtiva, searchQuery, priceRange, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceReload]);
 
   useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; filterRef.current = { liga: ligaAtiva, query: searchQuery }; return; }
-    if (filterRef.current.liga !== ligaAtiva || filterRef.current.query !== searchQuery) {
-      filterRef.current = { liga: ligaAtiva, query: searchQuery };
+    if (isFirstRender.current) { isFirstRender.current = false; filterRef.current = { liga: ligaAtiva, query: searchQuery, priceRange }; return; }
+    const changed = filterRef.current.liga !== ligaAtiva || filterRef.current.query !== searchQuery || filterRef.current.priceRange !== priceRange;
+    if (changed) {
+      filterRef.current = { liga: ligaAtiva, query: searchQuery, priceRange };
       setPhase('exiting');
       const exitTimer = setTimeout(() => {
         setDisplayFilter({ liga: ligaAtiva, query: searchQuery });
+        setPage(1);
+        setHasMore(true);
+        setLoading(true);
+        fetchPage(1, ligaAtiva, searchQuery, priceRange, true);
         setPhase('entering');
         const enterTimer = setTimeout(() => setPhase('visible'), 400);
         return () => clearTimeout(enterTimer);
       }, 280);
       return () => clearTimeout(exitTimer);
     }
-  }, [ligaAtiva, searchQuery]);
+  }, [ligaAtiva, searchQuery, priceRange, fetchPage]);
 
-  const produtos = useMemo(() => {
-    let filtered = allProdutos;
-    if (displayFilter.liga) filtered = filtered.filter(p => p.liga === displayFilter.liga);
-    if (displayFilter.query.trim()) {
-      const q = displayFilter.query.toLowerCase().trim();
-      filtered = filtered.filter(p => p.nome.toLowerCase().includes(q) || p.liga.toLowerCase().includes(q));
-    }
-    if (priceRange[0] > 0 || priceRange[1] < 999) {
-      filtered = filtered.filter(p => {
-        const price = parseFloat(p.preco);
-        return price >= priceRange[0] && (priceRange[1] >= 999 || price <= priceRange[1]);
-      });
-    }
-    return filtered;
-  }, [displayFilter, allProdutos, priceRange]);
+  // Infinite scroll — carrega próxima página quando sentinel entra na tela
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
+        setLoadingMore(true);
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchPage(nextPage, ligaAtiva, searchQuery, priceRange, false);
+      }
+    }, { rootMargin: '300px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, loadingMore, loading, page, ligaAtiva, searchQuery, priceRange, fetchPage]);
 
   const handleClique = useCallback((produto) => {
     fetch(`${API_URL}/api/clique/${produto.id}`, { method: 'POST' }).catch(() => {});
@@ -1012,6 +1025,10 @@ function Home({ ligaAtiva, addToCart, searchQuery = '', forceReload = 0, cliente
           );
         })}
       </div>
+
+      {/* Sentinel — dispara infinite scroll */}
+      <div ref={sentinelRef} style={{ height: 1 }} />
+      {loadingMore && <div className="loading-more"><div className="spinner-small" /></div>}
 
       <AnimatePresence mode="wait" onExitComplete={() => {}}>
         {selectedProduct && (

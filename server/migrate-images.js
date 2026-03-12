@@ -19,14 +19,14 @@ const db = mysql.createConnection({
     port: process.env.DB_PORT || 3306
 });
 
-async function convertBase64ToWebP(base64, filename) {
+async function convertBase64ToWebP(base64, filename, width = 280) {
     const matches = base64.match(/^data:(.+);base64,(.+)$/);
     if (!matches) return null;
     const buffer = Buffer.from(matches[2], 'base64');
     const outPath = path.join(UPLOADS_DIR, filename);
     await sharp(buffer)
-        .resize(480, 480, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 82 })
+        .resize(width, null, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 85 })
         .toFile(outPath);
     return `/uploads/${filename}`;
 }
@@ -84,7 +84,7 @@ async function migrar() {
     );
     if (bannerRows.length > 0) {
         try {
-            const urlPath = await convertBase64ToWebP(bannerRows[0].valor, 'banner.webp');
+            const urlPath = await convertBase64ToWebP(bannerRows[0].valor, 'banner.webp', 1200);
             if (urlPath) {
                 await db.promise().query("UPDATE site_config SET valor = ? WHERE chave = 'banner_imagem'", [urlPath]);
                 console.log('🖼️  Banner convertido ✅');

@@ -6257,3 +6257,21 @@ button {
     opacity: 0 !important;
   }
 }
+
+/* Infinite scroll loader */
+.loading-more {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 40px;
+}
+.spinner-small {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: rgba(255,255,255,0.6);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
