@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useI18n } from '../i18n/index.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Package, Tag } from 'lucide-react';
+import { Check, Package, Tag, Truck } from 'lucide-react';
 
 import { API_URL } from '../config';
 
@@ -25,11 +25,19 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [cupomError, setCupomError] = useState('');
 
+  const [freteConfig, setFreteConfig] = useState({ ativo: true, valor: 29.90, gratis_acima: 299.90 });
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/frete-config`)
+      .then(r => r.json())
+      .then(data => setFreteConfig(data))
+      .catch(() => {});
+  }, []);
+
   const subtotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal ?? item.preco) * item.qtd, 0);
 
-  const FRETE = 29.90;
-  const FRETE_GRATIS = 299.90;
-  const freteValor = subtotal >= FRETE_GRATIS ? 0 : FRETE;
+  const freteValor = !freteConfig.ativo || subtotal >= freteConfig.gratis_acima ? 0 : freteConfig.valor;
+  const faltaParaGratis = Math.max(0, freteConfig.gratis_acima - subtotal);
 
   let desconto = 0;
   if (cupomData) {
@@ -281,6 +289,16 @@ const Checkout = ({ cart, setCart, onClienteLogin }) => {
                 onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
               />
             </div>
+
+            {freteConfig.ativo && (
+              <div className="checkout-frete-info">
+                <Truck size={13} />
+                {faltaParaGratis <= 0
+                  ? <span className="frete-gratis-badge">Frete grátis!</span>
+                  : <span>Frete: <strong>R$ {freteConfig.valor.toFixed(2)}</strong> — frete grátis acima de R$ {freteConfig.gratis_acima.toFixed(2)}</span>
+                }
+              </div>
+            )}
 
             <div className="checkout-cupom-row">
               <div className="checkout-cupom-input-wrap">

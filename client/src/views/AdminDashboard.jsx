@@ -572,7 +572,7 @@ function AdminDashboard() {
         adminFetch(`${API_URL}/api/admin/pedidos`).then(r => r.json()).then(d => { setPedidos(Array.isArray(d) ? d : []); loaded.pedidos = true; }).catch(() => {});
       }
     }
-    if (tab === 'banner' || tab === 'config') {
+    if (tab === 'banner' || tab === 'config' || tab === 'frete' || tab === 'manutencao') {
       if (force || !loaded.config) {
         adminFetch(`${API_URL}/api/admin/config`).then(r => r.json()).then(d => { setSiteConfig(d); loaded.config = true; }).catch(() => {});
       }
@@ -1642,8 +1642,207 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
             <input type="text" value={siteConfig.instagram || ''} onChange={(e) => setSiteConfig(prev => ({ ...prev, instagram: e.target.value }))} placeholder="@retrowavecamisas" />
           </div>
         </div>
+        <div className="editor-field" style={{ marginTop: 8 }}>
+          <label style={{ color: siteConfig.manutencao_ativo === '1' ? '#f87171' : 'inherit' }}>MODO MANUTENÇÃO</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={siteConfig.manutencao_ativo === '1'}
+              onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_ativo: e.target.checked ? '1' : '0' }))}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#f87171' }}
+            />
+            <span style={{ color: siteConfig.manutencao_ativo === '1' ? '#f87171' : 'inherit' }}>
+              {siteConfig.manutencao_ativo === '1' ? '⚠️ ATIVO — site offline para clientes' : 'Desativado'}
+            </span>
+          </label>
+          {siteConfig.manutencao_ativo === '1' && (
+            <span style={{ fontSize: '0.6rem', color: '#f87171', opacity: 0.8, display: 'block', marginTop: 4 }}>
+              Apenas você (admin) consegue acessar o site. Clientes veem tela de manutenção.
+            </span>
+          )}
+        </div>
         <button className="config-save-btn" onClick={saveConfig} disabled={configSaving}>
           {configSaving ? 'SALVANDO...' : 'SALVAR CONFIGURAÇÕES'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderFreteTab = () => (
+    <div className="admin-config-section">
+      <h3><Package size={16} /> CONFIGURAÇÕES DE FRETE</h3>
+      <div className="config-form" style={{ maxWidth: 480 }}>
+        <div className="editor-field">
+          <label>FRETE ATIVO</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={siteConfig.frete_ativo !== '0'}
+              onChange={e => setSiteConfig(prev => ({ ...prev, frete_ativo: e.target.checked ? '1' : '0' }))}
+              style={{ width: 16, height: 16, cursor: 'pointer' }}
+            />
+            {siteConfig.frete_ativo !== '0' ? 'Sim — cobrando frete' : 'Não — frete desativado (sempre grátis)'}
+          </label>
+        </div>
+
+        <div className="editor-row">
+          <div className="editor-field">
+            <label>VALOR DO FRETE (R$)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={siteConfig.frete_valor || '29.90'}
+              onChange={e => setSiteConfig(prev => ({ ...prev, frete_valor: e.target.value }))}
+              placeholder="29.90"
+            />
+            <span style={{ fontSize: '0.6rem', opacity: 0.5, marginTop: 4, display: 'block' }}>Valor cobrado quando não atingir o mínimo</span>
+          </div>
+          <div className="editor-field">
+            <label>FRETE GRÁTIS ACIMA DE (R$)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={siteConfig.frete_gratis_acima || '299.90'}
+              onChange={e => setSiteConfig(prev => ({ ...prev, frete_gratis_acima: e.target.value }))}
+              placeholder="299.90"
+            />
+            <span style={{ fontSize: '0.6rem', opacity: 0.5, marginTop: 4, display: 'block' }}>Compras acima desse valor têm frete grátis</span>
+          </div>
+        </div>
+
+        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '14px 16px', fontSize: '0.65rem', lineHeight: 1.8, letterSpacing: 0.5 }}>
+          <div style={{ opacity: 0.5, letterSpacing: 2, fontSize: '0.55rem', marginBottom: 8 }}>PREVIEW</div>
+          {siteConfig.frete_ativo === '0'
+            ? <span style={{ color: '#4ade80' }}>✓ Frete grátis em todos os pedidos</span>
+            : <>
+                <div>Frete: <strong>R$ {parseFloat(siteConfig.frete_valor || 29.90).toFixed(2)}</strong></div>
+                <div>Grátis em pedidos acima de: <strong>R$ {parseFloat(siteConfig.frete_gratis_acima || 299.90).toFixed(2)}</strong></div>
+              </>
+          }
+        </div>
+
+        <button className="config-save-btn" onClick={saveConfig} disabled={configSaving}>
+          {configSaving ? 'SALVANDO...' : 'SALVAR CONFIGURAÇÕES DE FRETE'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderManutencaoTab = () => (
+    <div className="admin-config-section">
+      <h3>🔧 MODO MANUTENÇÃO</h3>
+      <div className="config-form" style={{ maxWidth: 560 }}>
+
+        {/* Toggle on/off */}
+        <div className="editor-field">
+          <label style={{ color: siteConfig.manutencao_ativo === '1' ? '#f87171' : 'inherit' }}>STATUS</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={siteConfig.manutencao_ativo === '1'}
+              onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_ativo: e.target.checked ? '1' : '0' }))}
+              style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#f87171' }}
+            />
+            <span style={{ color: siteConfig.manutencao_ativo === '1' ? '#f87171' : 'inherit', fontWeight: 600 }}>
+              {siteConfig.manutencao_ativo === '1' ? '⚠️ ATIVO — clientes veem esta tela' : 'Desativado'}
+            </span>
+          </label>
+        </div>
+
+        {/* Título */}
+        <div className="editor-field">
+          <label>TÍTULO</label>
+          <input type="text" value={siteConfig.manutencao_titulo || ''} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_titulo: e.target.value }))} placeholder="EM MANUTENÇÃO" />
+        </div>
+
+        {/* Subtítulo */}
+        <div className="editor-field">
+          <label>MENSAGEM / SUBTÍTULO</label>
+          <textarea rows={3} value={siteConfig.manutencao_subtitulo || ''} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_subtitulo: e.target.value }))} placeholder="Estamos fazendo melhorias. Voltamos em breve." />
+        </div>
+
+        {/* Cores */}
+        <div className="editor-row">
+          <div className="editor-field">
+            <label>COR DE FUNDO</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="color" value={siteConfig.manutencao_cor_fundo || '#0a0a0a'} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_cor_fundo: e.target.value }))} style={{ width: 40, height: 36, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+              <input type="text" value={siteConfig.manutencao_cor_fundo || '#0a0a0a'} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_cor_fundo: e.target.value }))} style={{ flex: 1 }} />
+            </div>
+          </div>
+          <div className="editor-field">
+            <label>COR DO TEXTO</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="color" value={siteConfig.manutencao_cor_texto || '#ffffff'} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_cor_texto: e.target.value }))} style={{ width: 40, height: 36, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+              <input type="text" value={siteConfig.manutencao_cor_texto || '#ffffff'} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_cor_texto: e.target.value }))} style={{ flex: 1 }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Animação */}
+        <div className="editor-field">
+          <label>ANIMAÇÃO DO TÍTULO</label>
+          <select value={siteConfig.manutencao_animacao || 'pulse'} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_animacao: e.target.value }))}>
+            <option value="none">Nenhuma</option>
+            <option value="pulse">Pulse (pisca suave)</option>
+            <option value="float">Float (flutua)</option>
+            <option value="glow">Glow (brilho)</option>
+            <option value="shake">Shake (chacoalha)</option>
+            <option value="scan">Scan (linha digital)</option>
+          </select>
+        </div>
+
+        {/* Imagem de fundo */}
+        <div className="editor-field">
+          <label>IMAGEM DE FUNDO (opcional)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ cursor: 'pointer', padding: '6px 14px', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.6rem', letterSpacing: 1.5 }}>
+              ESCOLHER IMAGEM
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => setSiteConfig(prev => ({ ...prev, manutencao_imagem: ev.target.result }));
+                reader.readAsDataURL(file);
+                e.target.value = '';
+              }} />
+            </label>
+            {siteConfig.manutencao_imagem && (
+              <>
+                <img src={siteConfig.manutencao_imagem} alt="preview" style={{ height: 40, objectFit: 'cover', borderRadius: 3, maxWidth: 80 }} />
+                <button onClick={() => setSiteConfig(prev => ({ ...prev, manutencao_imagem: '' }))} style={{ background: 'none', border: '1px solid rgba(255,0,0,0.3)', color: '#f87171', fontSize: '0.6rem', padding: '4px 10px', cursor: 'pointer', borderRadius: 3 }}>REMOVER</button>
+              </>
+            )}
+          </div>
+          <span style={{ fontSize: '0.6rem', opacity: 0.45, marginTop: 4, display: 'block' }}>Se definido, aparece como fundo. O vídeo tem prioridade sobre a imagem.</span>
+        </div>
+
+        {/* Vídeo */}
+        <div className="editor-field">
+          <label>VÍDEO DE FUNDO (opcional)</label>
+          <input type="text" value={siteConfig.manutencao_video_url || ''} onChange={e => setSiteConfig(prev => ({ ...prev, manutencao_video_url: e.target.value }))} placeholder="URL do YouTube ou link direto .mp4" />
+          <span style={{ fontSize: '0.6rem', opacity: 0.45, marginTop: 4, display: 'block' }}>Ex: https://youtube.com/watch?v=... ou https://site.com/video.mp4</span>
+        </div>
+
+        {/* Preview */}
+        <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', marginTop: 8 }}>
+          <div style={{ fontSize: '0.5rem', letterSpacing: 2, opacity: 0.45, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>PREVIEW</div>
+          <div style={{ background: siteConfig.manutencao_cor_fundo || '#0a0a0a', color: siteConfig.manutencao_cor_texto || '#fff', padding: '32px 20px', textAlign: 'center', position: 'relative', minHeight: 120 }}>
+            {siteConfig.manutencao_imagem && (
+              <img src={siteConfig.manutencao_imagem} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35 }} />
+            )}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>🔧</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: 4, marginBottom: 6 }}>{siteConfig.manutencao_titulo || 'EM MANUTENÇÃO'}</div>
+              <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>{siteConfig.manutencao_subtitulo || 'Voltamos em breve.'}</div>
+            </div>
+          </div>
+        </div>
+
+        <button className="config-save-btn" onClick={saveConfig} disabled={configSaving}>
+          {configSaving ? 'SALVANDO...' : 'SALVAR'}
         </button>
       </div>
     </div>
@@ -1790,12 +1989,25 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
               )}
             </div>
 
-            <div className="metrics-grid">
-              <div className="metric-card"><span className="metric-label">RECEITA BRUTA</span><span className="metric-value">R$ {parseFloat(displayStats.receita || displayStats.receitaTotal || 0).toFixed(2)}</span><span className="metric-sub">{displayStats.pedidos || displayStats.totalPedidos || 0} pedidos</span></div>
-              <div className="metric-card"><span className="metric-label">DESPESAS</span><span className="metric-value">R$ {parseFloat(displayStats.despesas || displayStats.despesasTotal || 0).toFixed(2)}</span></div>
-              <div className="metric-card highlight"><span className="metric-label">LUCRO LÍQUIDO</span><span className="metric-value">R$ {(parseFloat(displayStats.receita || displayStats.receitaTotal || 0) - parseFloat(displayStats.despesas || displayStats.despesasTotal || 0)).toFixed(2)}</span></div>
-              <div className="metric-card"><span className="metric-label">VISITANTES / CLIQUES</span><span className="metric-value">{displayStats.visitantes || displayStats.totalVisitantes || 0}</span><span className="metric-sub">{displayStats.cliques || displayStats.totalCliquesGeral || 0} cliques</span></div>
-            </div>
+            {(() => {
+              const receita = parseFloat(displayStats.receita || displayStats.receitaTotal || 0);
+              const despesas = parseFloat(displayStats.despesas || displayStats.despesasTotal || 0);
+              const pedidos = parseInt(displayStats.pedidos || displayStats.totalPedidos || 0);
+              const visitantes = parseInt(displayStats.visitantes || displayStats.totalVisitantes || 0);
+              const cliques = parseInt(displayStats.cliques || displayStats.totalCliquesGeral || 0);
+              const taxaConv = visitantes > 0 ? ((pedidos / visitantes) * 100).toFixed(1) + '%' : '—';
+              const ticketMedio = pedidos > 0 ? 'R$ ' + (receita / pedidos).toFixed(2) : '—';
+              return (
+                <div className="metrics-grid">
+                  <div className="metric-card"><span className="metric-label">RECEITA BRUTA</span><span className="metric-value">R$ {receita.toFixed(2)}</span><span className="metric-sub">{pedidos} pedidos</span></div>
+                  <div className="metric-card"><span className="metric-label">DESPESAS</span><span className="metric-value">R$ {despesas.toFixed(2)}</span></div>
+                  <div className="metric-card highlight"><span className="metric-label">LUCRO LÍQUIDO</span><span className="metric-value">R$ {(receita - despesas).toFixed(2)}</span></div>
+                  <div className="metric-card"><span className="metric-label">VISITANTES / CLIQUES</span><span className="metric-value">{visitantes}</span><span className="metric-sub">{cliques} cliques</span></div>
+                  <div className="metric-card"><span className="metric-label">TICKET MÉDIO</span><span className="metric-value">{ticketMedio}</span></div>
+                  <div className="metric-card"><span className="metric-label">TAXA DE CONVERSÃO</span><span className="metric-value">{taxaConv}</span><span className="metric-sub">visita → pedido</span></div>
+                </div>
+              );
+            })()}
 
             {/* CSV & PDF Exports */}
             <div className="export-bar">
@@ -1969,6 +2181,8 @@ IMPORTANTE: NUNCA use formatação markdown como *, **, #, ## ou qualquer marca�
 
         {activeTab === 'banner' && renderBannerTab()}
         {activeTab === 'config' && renderConfigTab()}
+        {activeTab === 'frete' && renderFreteTab()}
+        {activeTab === 'manutencao' && renderManutencaoTab()}
 
         {activeTab === 'despesas' && (
           <div>

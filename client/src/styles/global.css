@@ -702,6 +702,47 @@ button {
   opacity: 1;
 }
 
+.cart-frete-banner {
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.cart-frete-gratis {
+  color: #4ade80;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.cart-frete-bar {
+  height: 3px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.cart-frete-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, #a78bfa, #4ade80);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.cart-economia {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: #4ade80;
+  margin-bottom: 8px;
+}
+
 .cart-footer {
   margin-top: auto;
   border-top: 1px solid var(--accent-color);
@@ -1513,7 +1554,7 @@ button {
 /* Metrics Cards */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 2px;
   margin-bottom: 40px;
 }
@@ -5390,6 +5431,18 @@ button {
   color: rgba(255, 255, 255, 0.8);
 }
 
+.modal-share-whatsapp {
+  border-color: rgba(37, 211, 102, 0.3);
+  color: rgba(37, 211, 102, 0.7);
+  text-decoration: none;
+}
+
+.modal-share-whatsapp:hover {
+  border-color: #25d366;
+  color: #25d366;
+  background: rgba(37, 211, 102, 0.08);
+}
+
 .modal-share-msg {
   color: #6bc46b;
   font-size: 0.5rem;
@@ -5637,6 +5690,26 @@ button {
 .item-esgotado .lazy-img-wrap img { filter: grayscale(0.4); }
 
 /* ── Checkout Coupon (A6) ── */
+.checkout-frete-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  opacity: 0.85;
+}
+
+.frete-gratis-badge {
+  color: #4ade80;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
 .checkout-cupom-row {
   margin-bottom: 16px;
 }
@@ -6324,4 +6397,175 @@ button {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── MAINTENANCE PAGE ── */
+.manutencao-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+.manutencao-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.35;
+}
+
+.manutencao-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.45;
+  border: none;
+}
+
+.manutencao-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.7));
+}
+
+.manutencao-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 480px;
+}
+
+.manutencao-icon {
+  font-size: 3rem;
+  margin-bottom: 24px;
+}
+
+.manutencao-title {
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: var(--mt-cor, #fff);
+}
+
+.manutencao-sub {
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  opacity: 0.6;
+  line-height: 1.7;
+  margin-bottom: 0;
+  color: var(--mt-cor, #fff);
+}
+
+.manutencao-admin-link {
+  display: block;
+  margin-top: 60px;
+  font-size: 0.5rem;
+  opacity: 0.12;
+  letter-spacing: 2px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.manutencao-admin-link:hover {
+  opacity: 0.3;
+}
+
+/* Animations */
+.manutencao-anim-pulse .manutencao-title {
+  animation: mt-pulse 2.5s ease-in-out infinite;
+}
+.manutencao-anim-pulse .manutencao-icon {
+  animation: mt-pulse 2.5s ease-in-out infinite;
+}
+@keyframes mt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.manutencao-anim-float .manutencao-content {
+  animation: mt-float 3s ease-in-out infinite;
+}
+@keyframes mt-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.manutencao-anim-glow .manutencao-title {
+  animation: mt-glow 2s ease-in-out infinite alternate;
+}
+@keyframes mt-glow {
+  from { text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+  to { text-shadow: 0 0 30px rgba(255,255,255,0.9), 0 0 60px rgba(255,255,255,0.4); }
+}
+
+.manutencao-anim-shake .manutencao-icon {
+  animation: mt-shake 0.8s ease-in-out infinite;
+}
+@keyframes mt-shake {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-15deg); }
+  40% { transform: rotate(15deg); }
+  60% { transform: rotate(-10deg); }
+  80% { transform: rotate(10deg); }
+}
+
+.manutencao-anim-scan .manutencao-content::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--mt-cor, #fff), transparent);
+  animation: mt-scan 2s linear infinite;
+  opacity: 0.4;
+}
+@keyframes mt-scan {
+  0% { top: -10%; }
+  100% { top: 110%; }
+}
+
+.manutencao-anim-scan .manutencao-content {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Admin maintenance toggle button in header */
+.admin-manut-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 0.85rem;
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 0.5;
+  margin-left: 4px;
+}
+
+.admin-manut-btn:hover {
+  opacity: 0.9;
+  border-color: rgba(255,255,255,0.3);
+}
+
+.admin-manut-btn.active {
+  border-color: #f87171;
+  background: rgba(248,113,113,0.12);
+  opacity: 1;
+  animation: mt-pulse 1.5s ease-in-out infinite;
 }

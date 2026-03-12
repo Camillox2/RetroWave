@@ -740,6 +740,14 @@ function ProductModal({ produto, onClose, onAddToCart, favorites, toggleFavorite
             {/* Share (C2) */}
             <div className="modal-share-row">
               <button onClick={handleCopyLink} className="modal-share-btn"><Copy size={12} /> {t('home.copy_link').toUpperCase()}</button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${shareUrl}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="modal-share-btn modal-share-whatsapp"
+              >
+                <Share2 size={12} /> WHATSAPP
+              </a>
               {shareMsg && <span className="modal-share-msg">{shareMsg}</span>}
             </div>
 

@@ -242,6 +242,20 @@ db.query(`CREATE TABLE IF NOT EXISTS carrinhos_abandonados (
 db.query('ALTER TABLE pedidos ADD COLUMN codigo_rastreio VARCHAR(100) DEFAULT NULL', (err) => {});
 db.query('ALTER TABLE pedidos ADD COLUMN data_envio DATE DEFAULT NULL', (err) => {});
 
+// Seed frete e manutenção defaults em site_config
+db.query(`INSERT IGNORE INTO site_config (chave, valor) VALUES
+  ('frete_ativo','1'),
+  ('frete_valor','29.90'),
+  ('frete_gratis_acima','299.90'),
+  ('manutencao_ativo','0'),
+  ('manutencao_titulo','EM MANUTENÇÃO'),
+  ('manutencao_subtitulo','Estamos fazendo melhorias. Voltamos em breve.'),
+  ('manutencao_cor_fundo','#0a0a0a'),
+  ('manutencao_cor_texto','#ffffff'),
+  ('manutencao_imagem',''),
+  ('manutencao_video_url',''),
+  ('manutencao_animacao','pulse')`, () => {});
+
 // Anúncios / Promoções do site (aba Admin Promoções)
 db.query(`CREATE TABLE IF NOT EXISTS anuncios (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -304,6 +318,20 @@ app.get('/api/config', (req, res) => {
         const config = {};
         rows.forEach(r => { config[r.chave] = r.valor; });
         res.json(config);
+    });
+});
+
+// Configurações de frete (público — usado no checkout e no carrinho)
+app.get('/api/frete-config', (req, res) => {
+    db.query("SELECT chave, valor FROM site_config WHERE chave IN ('frete_ativo','frete_valor','frete_gratis_acima')", (err, rows) => {
+        if (err) return res.json({ ativo: true, valor: 29.90, gratis_acima: 299.90 });
+        const cfg = {};
+        rows.forEach(r => { cfg[r.chave] = r.valor; });
+        res.json({
+            ativo: cfg.frete_ativo !== '0',
+            valor: parseFloat(cfg.frete_valor) || 29.90,
+            gratis_acima: parseFloat(cfg.frete_gratis_acima) || 299.90
+        });
     });
 });
 

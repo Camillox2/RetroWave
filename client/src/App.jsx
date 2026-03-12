@@ -300,6 +300,8 @@ function AppContent() {
   const [voiceSearching, setVoiceSearching] = useState(false);
   const voiceSearchRef = useRef(null);
   const adminTabNavRef = useRef(null);
+  const [freteConfig, setFreteConfig] = useState({ ativo: true, valor: 29.90, gratis_acima: 299.90 });
+  const [manutencaoConfig, setManutencaoConfig] = useState({ ativo: false, titulo: 'EM MANUTENÇÃO', subtitulo: 'Voltamos em breve.', cor_fundo: '#0a0a0a', cor_texto: '#ffffff', imagem: '', video_url: '', animacao: 'pulse' });
 
   // Persistir carrinho no localStorage
   useEffect(() => {
@@ -311,6 +313,31 @@ function AppContent() {
     fetch(`${API_URL}/api/anuncios/ativo`)
       .then(r => r.json())
       .then(data => setAnuncioBanner(data))
+      .catch(() => {});
+  }, []);
+
+  // Buscar config de frete
+  useEffect(() => {
+    fetch(`${API_URL}/api/frete-config`)
+      .then(r => r.json())
+      .then(data => setFreteConfig(data))
+      .catch(() => {});
+  }, []);
+
+  // Verificar modo manutenção
+  useEffect(() => {
+    fetch(`${API_URL}/api/config`)
+      .then(r => r.json())
+      .then(data => setManutencaoConfig({
+        ativo: data.manutencao_ativo === '1',
+        titulo: data.manutencao_titulo || 'EM MANUTENÇÃO',
+        subtitulo: data.manutencao_subtitulo || 'Voltamos em breve.',
+        cor_fundo: data.manutencao_cor_fundo || '#0a0a0a',
+        cor_texto: data.manutencao_cor_texto || '#ffffff',
+        imagem: data.manutencao_imagem || '',
+        video_url: data.manutencao_video_url || '',
+        animacao: data.manutencao_animacao || 'pulse',
+      }))
       .catch(() => {});
   }, []);
   const [langOpen, setLangOpen] = useState(false);
@@ -434,6 +461,11 @@ function AppContent() {
 
   const cartTotal = cart.reduce((acc, item) => acc + parseFloat(item.precoFinal ?? item.preco) * item.qtd, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.qtd, 0);
+  const cartEconomia = cart.reduce((acc, item) => {
+    const orig = parseFloat(item.preco);
+    const final = parseFloat(item.precoFinal ?? item.preco);
+    return acc + (orig > final ? (orig - final) * item.qtd : 0);
+  }, 0);
 
   // Cart abandonment — save to backend when user has email and cart isn't empty
   useEffect(() => {
@@ -467,12 +499,12 @@ function AppContent() {
       .catch(() => {});
   }, [cliente?.email]);
 
-  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'despesas', 'pedidos', 'cupons', 'avaliacoes', 'newsletter', 'estoque', 'promocoes', 'lucratividade', 'campanhas'];
+  const adminTabs = ['dashboard', 'produtos', 'banner', 'config', 'frete', 'manutencao', 'despesas', 'pedidos', 'cupons', 'avaliacoes', 'newsletter', 'estoque', 'promocoes', 'lucratividade', 'campanhas'];
   const adminTabLabels = {
     dashboard: 'PAINEL', produtos: 'PRODUTOS', banner: 'BANNER', config: 'CONFIG',
-    despesas: 'DESPESAS', pedidos: 'PEDIDOS', cupons: 'CUPONS', avaliacoes: 'REVIEWS',
-    newsletter: 'NEWSLETTER', estoque: 'ESTOQUE', promocoes: 'PROMOÇÕES',
-    lucratividade: 'LUCRATIVIDADE', campanhas: 'CAMPANHAS'
+    frete: 'FRETE', manutencao: 'MANUTENÇÃO', despesas: 'DESPESAS', pedidos: 'PEDIDOS',
+    cupons: 'CUPONS', avaliacoes: 'REVIEWS', newsletter: 'NEWSLETTER', estoque: 'ESTOQUE',
+    promocoes: 'PROMOÇÕES', lucratividade: 'LUCRATIVIDADE', campanhas: 'CAMPANHAS'
   };
 
   const handleNewsletterSubmit = async (e) => {
@@ -535,6 +567,34 @@ function AppContent() {
     rec.start();
   }, [voiceSearching, searchOpen]);
 
+  // Modo manutenção — bloqueia site para não-admins
+  if (manutencaoConfig.ativo && location.pathname !== '/admin') {
+    const cfg = manutencaoConfig;
+    const isYoutube = cfg.video_url && (cfg.video_url.includes('youtube') || cfg.video_url.includes('youtu.be'));
+    const ytId = isYoutube ? (cfg.video_url.match(/(?:v=|youtu\.be\/)([^&?/]+)/)?.[1] || '') : '';
+    const isDirectVideo = cfg.video_url && !isYoutube;
+    return (
+      <div className={`manutencao-page manutencao-anim-${cfg.animacao}`} style={{ background: cfg.cor_fundo, color: cfg.cor_texto, '--mt-cor': cfg.cor_texto }}>
+        {cfg.imagem && !cfg.video_url && (
+          <img src={cfg.imagem} alt="" className="manutencao-bg-img" />
+        )}
+        {isYoutube && ytId && (
+          <iframe className="manutencao-video" src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&showinfo=0`} allow="autoplay; fullscreen" frameBorder="0" />
+        )}
+        {isDirectVideo && (
+          <video className="manutencao-video" src={cfg.video_url} autoPlay muted loop playsInline />
+        )}
+        <div className="manutencao-overlay" />
+        <div className="manutencao-content">
+          <div className="manutencao-icon">🔧</div>
+          <h1 className="manutencao-title">{cfg.titulo}</h1>
+          <p className="manutencao-sub">{cfg.subtitulo}</p>
+          <a href="/admin" className="manutencao-admin-link">admin</a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* ── BANNER DE ANÚNCIO ── */}
@@ -579,6 +639,13 @@ function AppContent() {
               ))}
             </nav>
             <button className="admin-tabs-arrow" onClick={() => adminTabNavRef.current?.scrollBy({ left: 120, behavior: 'smooth' })}>›</button>
+            <button
+              className={`admin-manut-btn ${manutencaoConfig.ativo ? 'active' : ''}`}
+              title={manutencaoConfig.ativo ? 'Manutenção ATIVA — clique para gerenciar' : 'Modo manutenção — clique para gerenciar'}
+              onClick={() => setSearchParams({ tab: 'manutencao' })}
+            >
+              🔧
+            </button>
           </div>
         ) : (
           <nav className={`filters ${filterLocked ? 'filters-locked' : ''}`}>
@@ -859,7 +926,29 @@ function AppContent() {
                     ))}
                   </div>
 
+                  {freteConfig.ativo && (() => {
+                    const falta = freteConfig.gratis_acima - cartTotal;
+                    const pct = Math.min(100, (cartTotal / freteConfig.gratis_acima) * 100);
+                    return (
+                      <div className="cart-frete-banner">
+                        {falta <= 0
+                          ? <span className="cart-frete-gratis">🎉 Frete grátis aplicado!</span>
+                          : <>
+                              <span>Falta <strong>R$ {falta.toFixed(2)}</strong> para frete grátis</span>
+                              <div className="cart-frete-bar"><div className="cart-frete-bar-fill" style={{ width: `${pct}%` }} /></div>
+                            </>
+                        }
+                      </div>
+                    );
+                  })()}
+
                   <div className="cart-footer">
+                    {cartEconomia > 0 && (
+                      <div className="cart-economia">
+                        <span>ECONOMIA</span>
+                        <span>− R$ {cartEconomia.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="cart-total">
                       <span>{t('cart.total').toUpperCase()}</span>
                       <span>R$ {cartTotal.toFixed(2)}</span>
